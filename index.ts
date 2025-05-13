@@ -2,12 +2,15 @@ import express from "express";
 import mongoose, { Schema, Document } from "mongoose";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
+import cors from "cors";
+
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
+app.use(cors());
 
 /* ----------------------- ENV CHECK ----------------------- */
 const requiredEnv = ["MONGODB_URI", "VAPI_API_KEY"];
