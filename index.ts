@@ -218,10 +218,10 @@ const processNextCall = async (): Promise<void> => {
 /* ------------------------- ROUTES ------------------------- */
 
 app.post("/queue-calls", async (req, res) => {
-    const { clerkId, customers, callTimeStart, callTimeEnd } = req.body;
+    const { clerkId, contacts, callTimeStart, callTimeEnd } = req.body;
 
-    if (!clerkId || !Array.isArray(customers)) {
-        return res.status(400).json({ error: "clerkId and customers[] required" });
+    if (!clerkId || !Array.isArray(contacts)) {
+        return res.status(400).json({ error: "clerkId and contacts[] required" });
     }
 
     // Validate time format if provided
@@ -239,11 +239,11 @@ app.post("/queue-calls", async (req, res) => {
         const user = await User.findById(clerkId);
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        const validCustomers = customers.filter(
+        const validcontacts = contacts.filter(
             c => typeof c.name === "string" && typeof c.number === "string"
         );
 
-        if (validCustomers.length === 0) {
+        if (validcontacts.length === 0) {
             return res.status(400).json({ error: "No valid customer entries." });
         }
 
@@ -251,13 +251,13 @@ app.post("/queue-calls", async (req, res) => {
         if (callTimeStart) user.callTimeStart = callTimeStart;
         if (callTimeEnd) user.callTimeEnd = callTimeEnd;
 
-        user.callQueue.push(...validCustomers);
+        user.callQueue.push(...validcontacts);
         await user.save();
 
-        console.log(`📦 Queued ${validCustomers.length} calls for user ${clerkId}`);
+        console.log(`📦 Queued ${validcontacts.length} calls for user ${clerkId}`);
         res.json({ 
-            message: "Customers queued", 
-            count: validCustomers.length,
+            message: "contacts queued", 
+            count: validcontacts.length,
             callTimeStart: user.callTimeStart,
             callTimeEnd: user.callTimeEnd
         });
