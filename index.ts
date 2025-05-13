@@ -49,6 +49,8 @@ interface IUser extends Document {
         name: string;
         number: string;
     }[];
+    callTimeStart: string; // HH:mm format
+    callTimeEnd: string; // HH:mm format
     createdAt: Date;
     updatedAt: Date;
 }
@@ -78,6 +80,8 @@ const UserSchema: Schema = new Schema(
         assistantId: { type: String },
         content: { type: String },
         callQueue: [CallQueueSchema],
+        callTimeStart: { type: String, default: "03:30" }, // Default 9 AM
+        callTimeEnd: { type: String, default: "05:30" }, // Default 5 PM
     },
     { timestamps: true }
 );
@@ -85,7 +89,6 @@ const UserSchema: Schema = new Schema(
 const User = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
 
 /* ------------------------- VAPI HELPERS ------------------------- */
-
 let isProcessing = false;
 
 const isVapiBusy = async (): Promise<boolean> => {
@@ -110,6 +113,15 @@ const isVapiBusy = async (): Promise<boolean> => {
     }
 };
 
+const isWithinCallHours = (startTime: string, endTime: string): boolean => {
+    const now = new Date();
+    const currentTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+    console.log("Current time:", currentTime);
+    console.log("Start time:", startTime);
+    console.log("End time:", endTime);
+    return currentTime >= startTime && currentTime <= endTime;
+};
+
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 const processNextCall = async (): Promise<void> => {
@@ -118,6 +130,24 @@ const processNextCall = async (): Promise<void> => {
 
     try {
         await connectDB();
+
+        const user = await User.findOne({ 
+            callQueue: { $exists: true, $not: { $size: 0 } }
+        });
+
+        if (!user) {
+            console.log("📭 No queued calls found.");
+            isProcessing = false;
+            return;
+        }
+
+        if (!isWithinCallHours(user.callTimeStart, user.callTimeEnd)) {
+            console.log("⏰ Outside of calling hours. Waiting...");
+
+            isProcessing = false;
+            await delay(180000); // Wait 1 minute before checking again
+            return processNextCall();
+        }
 
         const vapiBusy = await isVapiBusy();
         if (vapiBusy) {
@@ -128,22 +158,16 @@ const processNextCall = async (): Promise<void> => {
         }
 
         // Atomically pop first call from queue
-        const user = await User.findOneAndUpdate(
-            { callQueue: { $exists: true, $not: { $size: 0 } } },
+        const updatedUser = await User.findOneAndUpdate(
+            { _id: user._id },
             { $pop: { callQueue: -1 } },
             { new: false }
         );
 
-        if (!user) {
-            console.log("📭 No queued calls found.");
-            isProcessing = false;
-            return;
-        }
+        const nextCall = updatedUser.callQueue[0]; // The one just popped
 
-        const nextCall = user.callQueue[0]; // The one just popped
-
-        if (!user.twilioConfig?.sid || !user.twilioConfig?.authToken || !user.twilioConfig?.phoneNumber) {
-            console.error("❌ User missing Twilio config:", user._id);
+        if (!updatedUser.twilioConfig?.sid || !updatedUser.twilioConfig?.authToken || !updatedUser.twilioConfig?.phoneNumber) {
+            console.error("❌ User missing Twilio config:", updatedUser._id);
             isProcessing = false;
             return;
         }
@@ -155,11 +179,11 @@ const processNextCall = async (): Promise<void> => {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                assistantId: user.assistantId,
+                assistantId: updatedUser.assistantId,
                 phoneNumber: {
-                    twilioAccountSid: user.twilioConfig.sid,
-                    twilioPhoneNumber: user.twilioConfig.phoneNumber,
-                    twilioAuthToken: user.twilioConfig.authToken,
+                    twilioAccountSid: updatedUser.twilioConfig.sid,
+                    twilioPhoneNumber: updatedUser.twilioConfig.phoneNumber,
+                    twilioAuthToken: updatedUser.twilioConfig.authToken,
                 },
                 customer: {
                     name: nextCall.name,
@@ -191,10 +215,19 @@ const processNextCall = async (): Promise<void> => {
 /* ------------------------- ROUTES ------------------------- */
 
 app.post("/queue-calls", async (req, res) => {
-    const { clerkId, customers } = req.body;
+    const { clerkId, customers, callTimeStart, callTimeEnd } = req.body;
 
     if (!clerkId || !Array.isArray(customers)) {
         return res.status(400).json({ error: "clerkId and customers[] required" });
+    }
+
+    // Validate time format if provided
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (callTimeStart && !timeRegex.test(callTimeStart)) {
+        return res.status(400).json({ error: "Invalid callTimeStart format. Use HH:mm" });
+    }
+    if (callTimeEnd && !timeRegex.test(callTimeEnd)) {
+        return res.status(400).json({ error: "Invalid callTimeEnd format. Use HH:mm" });
     }
 
     try {
@@ -211,11 +244,20 @@ app.post("/queue-calls", async (req, res) => {
             return res.status(400).json({ error: "No valid customer entries." });
         }
 
+        // Update call times if provided
+        if (callTimeStart) user.callTimeStart = callTimeStart;
+        if (callTimeEnd) user.callTimeEnd = callTimeEnd;
+
         user.callQueue.push(...validCustomers);
         await user.save();
 
         console.log(`📦 Queued ${validCustomers.length} calls for user ${clerkId}`);
-        res.json({ message: "Customers queued", count: validCustomers.length });
+        res.json({ 
+            message: "Customers queued", 
+            count: validCustomers.length,
+            callTimeStart: user.callTimeStart,
+            callTimeEnd: user.callTimeEnd
+        });
 
         processNextCall();
     } catch (err) {
