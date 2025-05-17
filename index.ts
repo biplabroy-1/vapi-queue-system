@@ -188,7 +188,7 @@ const processNextCall = async (): Promise<void> => {
 
     if (!isWithinCallHours(user.callTimeStart, user.callTimeEnd)) {
       console.log("⏰ Outside of calling hours. Waiting...");
-      await delay(60000); // Wait 10 minutes before checking again
+      await delay(1800000); // Wait 3 minutes before checking again
       return processNextCall();
     }
 
@@ -203,15 +203,20 @@ const processNextCall = async (): Promise<void> => {
     const callsToProcess = Math.min(2 - activeCallCount, user.callQueue.length);
 
     for (let i = 0; i < callsToProcess; i++) {
-      const updatedUser = await User.findOneAndUpdate(
-        { _id: user._id },
-        { $pop: { callQueue: -1 } },
-        { new: false }
-      );
-
+      // Get the first item from the queue without removing it
+      const updatedUser = await User.findOne({ _id: user._id });
       if (!updatedUser?.callQueue?.[0]) continue;
 
       const nextCall = updatedUser.callQueue[0];
+
+      // Remove from callQueue and add to callQueueDone
+      await User.findOneAndUpdate(
+        { _id: user._id },
+        { 
+          $pop: { callQueue: -1 },
+          $push: { callQueueDone: nextCall }
+        }
+      );
 
       if (
         !updatedUser.twilioConfig?.sid ||
@@ -233,6 +238,7 @@ const processNextCall = async (): Promise<void> => {
     return processNextCall();
   }
 };
+
 
 /* ------------------------- ROUTES ------------------------- */
 
