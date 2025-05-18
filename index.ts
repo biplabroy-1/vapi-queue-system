@@ -6,30 +6,31 @@ import cors from "cors";
 
 dotenv.config();
 
+// Initialize express
 const app = express();
-const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(cors());
+const PORT = process.env.PORT || 3000;
 
-/* ----------------------- ENV CHECK ----------------------- */
-const requiredEnv = ["MONGODB_URI", "VAPI_API_KEY"];
-for (const key of requiredEnv) {
+// Validate required environment variables
+for (const key of ["MONGODB_URI", "VAPI_API_KEY"]) {
   if (!process.env[key]) {
     console.error(`❌ Missing environment variable: ${key}`);
     process.exit(1);
   }
 }
 
-/* ----------------------- DB CONNECTION ----------------------- */
+// DB Connection
 let dbConnecting = false;
 const connectDB = async () => {
   if (mongoose.connection.readyState !== 1 && !dbConnecting) {
     dbConnecting = true;
     try {
-      await mongoose.connect(process.env.MONGODB_URI!);
+      const DB_URL = process.env.MONGODB_URI || ""
+      await mongoose.connect(DB_URL);
       console.log("✅ MongoDB connected");
     } catch (err) {
-      console.log(err);
+      console.error(err);
       process.exit(1);
     } finally {
       dbConnecting = false;
@@ -37,7 +38,7 @@ const connectDB = async () => {
   }
 };
 
-/* ----------------------- SCHEMAS & MODELS ------------------------ */
+// Schema definitions
 interface IUser extends Document {
   _id: string;
   clerkId: string;
@@ -54,21 +55,27 @@ interface IUser extends Document {
     name: string;
     number: string;
   }[];
-  callTimeStart: string; // HH:mm format
-  callTimeEnd: string; // HH:mm format
+  callQueueDone: {
+    name: string;
+    number: string;
+    status?: string;
+  }[];
+  callTimeStart: string;
+  callTimeEnd: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const CallQueueSchema: Schema = new Schema(
+const CallQueueSchema = new Schema(
   {
     name: { type: String, required: true },
     number: { type: String, required: true },
+    status: { type: String }
   },
   { _id: false }
 );
 
-const UserSchema: Schema = new Schema(
+const UserSchema = new Schema(
   {
     _id: { type: String, required: true },
     clerkId: { type: String, required: true, unique: true },
@@ -85,24 +92,23 @@ const UserSchema: Schema = new Schema(
     assistantId: { type: String },
     content: { type: String },
     callQueue: [CallQueueSchema],
-    callTimeStart: { type: String, default: "03:30" }, // Default 9 AM
-    callTimeEnd: { type: String, default: "05:30" }, // Default 5 PM
+    callQueueDone: [CallQueueSchema],
+    callTimeStart: { type: String, default: "03:30" },
+    callTimeEnd: { type: String, default: "05:30" },
   },
   { timestamps: true }
 );
 
 const User = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
 
-/* ------------------------- VAPI HELPERS ------------------------- */
+// VAPI helpers
 let activeCallCount = 0;
 const MAX_CONCURRENT_CALLS = 2;
 
 const isVapiBusy = async (): Promise<boolean> => {
   try {
     const res = await fetch("https://api.vapi.ai/call?limit=10", {
-      headers: {
-        Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
-      },
+      headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
     });
 
     const data = await res.json();
@@ -111,11 +117,7 @@ const isVapiBusy = async (): Promise<boolean> => {
       return true;
     }
 
-    const allowedStatuses = ["ended", "queued", "scheduled"];
-    const activeCalls = data.filter(
-      (call) => !allowedStatuses.includes(call?.status)
-    );
-    activeCallCount = activeCalls.length;
+    activeCallCount = data.filter(call => !["ended", "queued", "scheduled"].includes(call?.status)).length;
     return activeCallCount >= MAX_CONCURRENT_CALLS;
   } catch (err) {
     console.error("❌ Failed to check VAPI status:", err);
@@ -133,44 +135,35 @@ const isWithinCallHours = (startTime: string, endTime: string): boolean => {
   return currentTime >= startTime && currentTime <= endTime;
 };
 
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+const delay = (seconds: number) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
 const makeCall = async (
   user: IUser,
-  nextCall: { name: string; number: string }
+  call: { name: string; number: string }
 ) => {
-  try {
-    const res = await fetch("https://api.vapi.ai/call", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
-        "Content-Type": "application/json",
+  const res = await fetch("https://api.vapi.ai/call", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      assistantId: user.assistantId,
+      phoneNumber: {
+        twilioAccountSid: user.twilioConfig.sid,
+        twilioPhoneNumber: user.twilioConfig.phoneNumber,
+        twilioAuthToken: user.twilioConfig.authToken,
       },
-      body: JSON.stringify({
-        assistantId: user.assistantId,
-        phoneNumber: {
-          twilioAccountSid: user.twilioConfig.sid,
-          twilioPhoneNumber: user.twilioConfig.phoneNumber,
-          twilioAuthToken: user.twilioConfig.authToken,
-        },
-        customer: {
-          name: nextCall.name,
-          number: nextCall.number,
-        },
-      }),
-    });
+      customer: { name: call.name, number: call.number },
+    }),
+  });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(errText);
-    }
-
-    console.log(`✅ Call made to ${nextCall.name} (${nextCall.number})`);
-    activeCallCount++;
-  } catch (err) {
-    console.error("❌ VAPI call failed:", err);
-    throw err;
+  if (!res.ok) {
+    throw new Error(`VAPI API Error: ${res.status} ${await res.text()}`);
   }
+
+  console.log(`✅ Call made to ${call.name} (${call.number})`);
+  activeCallCount++;
 };
 
 const processNextCall = async (): Promise<void> => {
@@ -179,69 +172,89 @@ const processNextCall = async (): Promise<void> => {
 
     const user = await User.findOne({
       callQueue: { $exists: true, $not: { $size: 0 } },
-    });
+    })
+      .select('_id callQueue callTimeStart callTimeEnd twilioConfig assistantId')
+      .lean() as IUser | null;
 
     if (!user) {
       console.log("📭 No queued calls found.");
       return;
     }
 
-    if (!isWithinCallHours(user.callTimeStart, user.callTimeEnd)) {
-      console.log("⏰ Outside of calling hours. Waiting...");
-      await delay(1800000); // Wait 3 minutes before checking again
+    const { _id, callQueue, callTimeStart, callTimeEnd, twilioConfig, assistantId } = user;
+
+    // Check for missing config
+    if (!twilioConfig?.sid || !twilioConfig?.authToken || !twilioConfig?.phoneNumber || !assistantId) {
+      console.warn(`⚠️ User ${_id} missing required config. Skipping...`);
+      return;
+    }
+
+    // Check call hours
+    if (!isWithinCallHours(callTimeStart, callTimeEnd)) {
+      console.log(`⏰ Outside calling hours for user ${_id}. Waiting...`);
+      await delay(1800);
       return processNextCall();
     }
 
-    const vapiBusy = await isVapiBusy();
-    if (vapiBusy) {
+    // Check VAPI availability
+    if (await isVapiBusy()) {
       console.log("⏳ VAPI busy. Retrying in 15s...");
-      await delay(15000);
+      await delay(15);
       return processNextCall();
     }
 
-    // Process up to 2 calls concurrently
-    const callsToProcess = Math.min(2 - activeCallCount, user.callQueue.length);
-
-    for (let i = 0; i < callsToProcess; i++) {
-      // Get the first item from the queue without removing it
-      const updatedUser = await User.findOne({ _id: user._id });
-      if (!updatedUser?.callQueue?.[0]) continue;
-
-      const nextCall = updatedUser.callQueue[0];
-
-      // Remove from callQueue and add to callQueueDone
-      await User.findOneAndUpdate(
-        { _id: user._id },
-        { 
-          $pop: { callQueue: -1 },
-          $push: { callQueueDone: nextCall }
-        }
-      );
-
-      if (
-        !updatedUser.twilioConfig?.sid ||
-        !updatedUser.twilioConfig?.authToken ||
-        !updatedUser.twilioConfig?.phoneNumber
-      ) {
-        console.error("❌ User missing Twilio config:", updatedUser._id);
-        continue;
-      }
-
-      await makeCall(updatedUser, nextCall);
+    const availableSlots = Math.min(MAX_CONCURRENT_CALLS - activeCallCount, callQueue.length);
+    if (availableSlots <= 0) {
+      console.log("📞 Max concurrent calls reached or no calls to process. Retrying in 15s...");
+      await delay(15);
+      return processNextCall();
     }
 
-    await delay(15000);
+    const batch = callQueue.slice(0, availableSlots);
+    console.log(`📲 Processing ${batch.length} call(s) for user ${_id}`);
+
+    for (const call of batch) {
+      try {
+        const updated = await User.findOneAndUpdate(
+          { _id, "callQueue.0": call },
+          {
+            $pop: { callQueue: -1 },
+            $push: { callQueueDone: { ...call, status: "pending_initiation" } },
+          },
+          { new: true }
+        );
+
+        if (!updated) continue;
+
+        await makeCall(user, call);
+
+        await User.updateOne(
+          { _id, "callQueueDone": { $elemMatch: { name: call.name, number: call.number, status: "pending_initiation" } } },
+          { $set: { "callQueueDone.$.status": "initiated" } }
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`❌ Call to ${call.name}: ${msg}`);
+
+        if (msg.includes("VAPI API Error")) activeCallCount = Math.max(0, activeCallCount - 1);
+
+        await User.updateOne(
+          { _id, "callQueueDone": { $elemMatch: { name: call.name, number: call.number, status: "pending_initiation" } } },
+          { $set: { "callQueueDone.$.status": "failed_to_initiate" } }
+        );
+      }
+    }
+
+    await delay(5);
     return processNextCall();
   } catch (err) {
-    console.error("❌ Call processing error:", err);
-    await delay(15000);
+    console.error(`❌ Processing error: ${err instanceof Error ? err.message : String(err)}`);
+    await delay(30);
     return processNextCall();
   }
 };
 
-
-/* ------------------------- ROUTES ------------------------- */
-
+// Routes
 app.post("/queue-calls", async (req, res) => {
   const { clerkId, contacts, callTimeStart, callTimeEnd } = req.body;
 
@@ -251,97 +264,65 @@ app.post("/queue-calls", async (req, res) => {
 
   // Validate time format if provided
   const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-  if (callTimeStart && !timeRegex.test(callTimeStart)) {
-    return res
-      .status(400)
-      .json({ error: "Invalid callTimeStart format. Use HH:mm" });
-  }
-  if (callTimeEnd && !timeRegex.test(callTimeEnd)) {
-    return res
-      .status(400)
-      .json({ error: "Invalid callTimeEnd format. Use HH:mm" });
+  if ((callTimeStart && !timeRegex.test(callTimeStart)) || (callTimeEnd && !timeRegex.test(callTimeEnd))) {
+    return res.status(400).json({ error: "Invalid time format. Use HH:mm" });
   }
 
   try {
     await connectDB();
-
     const user = await User.findById(clerkId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const validcontacts = contacts.filter(
-      (c) => typeof c.name === "string" && typeof c.number === "string"
-    );
-
-    if (validcontacts.length === 0) {
-      return res.status(400).json({ error: "No valid customer entries." });
-    }
+    const validContacts = contacts.filter(c => typeof c.name === "string" && typeof c.number === "string");
+    if (!validContacts.length) return res.status(400).json({ error: "No valid contacts" });
 
     // Update call times if provided
     if (callTimeStart) user.callTimeStart = callTimeStart;
     if (callTimeEnd) user.callTimeEnd = callTimeEnd;
 
-    user.callQueue.push(...validcontacts);
+    user.callQueue.push(...validContacts);
     await user.save();
 
-    console.log(`📦 Queued ${validcontacts.length} calls for user ${clerkId}`);
-    res.json({
-      message: "contacts queued",
-      count: validcontacts.length,
+    processNextCall();
+
+    return res.json({
+      message: `${validContacts.length} contacts queued`,
       callTimeStart: user.callTimeStart,
       callTimeEnd: user.callTimeEnd,
     });
-
-    processNextCall();
   } catch (err) {
-    console.error("❌ Failed to queue calls:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("❌ Queue error:", err instanceof Error ? err.message : String(err));
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
 app.post("/start-queue", async (req, res) => {
   try {
     await connectDB();
-
-    const clerkId = req.body?.clerkId;
+    const { clerkId } = req.body || {};
 
     if (clerkId) {
       const user = await User.findById(clerkId);
       if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user.callQueue.length) return res.status(400).json({ error: "No calls in queue" });
 
-      const queueLength = user.callQueue.length;
-
-      if (queueLength === 0) {
-        return res.status(400).json({ error: "No calls in queue" });
-      }
-
-      // Start processing this user's queue
       processNextCall();
-
-      return res.json({ message: "Queue processing started", queueLength });
+      return res.json({ message: "Queue started", queueLength: user.callQueue.length });
     }
+
     const users = await User.find({}, "_id callQueue");
-    const userQueueLength = users.map((user) => ({
-      userId: user._id,
-      queueLength: user.callQueue.length,
-    }));
-    const totalQueueLength = users.reduce(
-      (sum, user) => sum + user.callQueue.length,
-      0
-    );
+    const totalQueueLength = users.reduce((sum, user) => sum + user.callQueue.length, 0);
 
     return res.json({
-      message: "All user queue lengths",
-      userQueueLength,
-      totalQueueLength,
+      message: "All queues",
+      users: users.map(u => ({ id: u._id, queueLength: u.callQueue.length })),
+      totalQueueLength
     });
   } catch (err) {
-    console.error("❌ Failed to start queue processing:", err);
-    res.status(500).json({ error: "Internal Server Error", err });
+    console.error("❌ Start queue error:", err instanceof Error ? err.message : String(err));
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-/* ------------------------- START SERVER ------------------------- */
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+// Start server
+app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
