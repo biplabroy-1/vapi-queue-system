@@ -10,6 +10,12 @@ const router = express.Router();
 router.post("/", async (req: Request, res: Response) => {
     try {
         const payload = req.body;
+        
+        // Validate payload and payload.message
+        if (!payload || !payload.message || !payload.message.type) {
+            console.error("Invalid payload: Missing required 'message' or 'type' field.");
+            return res.status(400).json({ error: "Invalid payload: Missing required 'message' or 'type' field." });
+        }
         console.log(payload.message.type);
 
         // Process different webhook types
