@@ -6,9 +6,9 @@ import { connectDB } from "./src/connectDB";
 import apiRoutes from "./src/routes";
 import webhookRoutes from "./src/webhooks";
 import { config, validateEnv } from "./src/config";
-
 // Configure environment variables
 dotenv.config();
+
 
 declare global {
   var activeCallCount: number;

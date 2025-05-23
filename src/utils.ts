@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+
 export const isWithinCallHours = (startTime: string, endTime: string): boolean => {
     const now = new Date();
     const currentTime =
@@ -31,6 +33,35 @@ function toHumanReadableDate(isoString: string, locale = "default", timeZone?: s
         return "Invalid date format";
     }
 }
+
+// Schedule utility functions
+export type TimeSlot = 'morning' | 'afternoon' | 'evening' | null;
+export type DayOfWeek = 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
+
+export const getCurrentTimeSlot = (weeklySchedule: any, dayOfWeek: string): any | null => {
+    const now = dayjs();
+    const currentTime = now.format("HH:mm");
+
+    const slots = weeklySchedule?.[dayOfWeek];
+    if (!slots) return null;
+
+    for (const [slotName, slotData] of Object.entries(slots)) {
+        const { callTimeStart, callTimeEnd } = slotData as any;
+
+        if (callTimeStart && callTimeEnd && currentTime >= callTimeStart && currentTime <= callTimeEnd) {
+            return { slotName, slotData };
+        }
+    }
+
+    return null; // No matching slot
+};
+
+
+export const getCurrentDayOfWeek = (): DayOfWeek => {
+    const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayIndex = new Date().getDay();
+    return days[dayIndex];
+};
 
 // Example usage:
 const iso = new Date().toISOString();

@@ -1,27 +1,20 @@
 import express from "express";
-import { type Contact, type IUser, User } from "./models/models";
+import { type Contact, User } from "./models/models";
 import { connectDB } from "./connectDB";
 import { processNextCall } from "./services/callQueueService";
 import { getVapiAnalytics } from "./analytics/vapiAnalytics";
+import { getCurrentTimeSlot, getCurrentDayOfWeek } from "./utils";
 
 const router = express.Router();
 
-// Queue calls route
 // Queue calls route handler
 router.post("/queue-calls", async (req, res) => {
-    const { clerkId, contacts, callTimeStart, callTimeEnd } = req.body;
+    const { clerkId, contacts } = req.body;
 
     if (!clerkId || !Array.isArray(contacts)) {
         return res.status(400).json({ error: "clerkId and contacts[] required" });
     }
 
-
-
-    // Validate time format if provided
-    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if ((callTimeStart && !timeRegex.test(callTimeStart)) || (callTimeEnd && !timeRegex.test(callTimeEnd))) {
-        return res.status(400).json({ error: "Invalid time format. Use HH:mm" });
-    }
 
     try {
         await connectDB();
@@ -31,10 +24,6 @@ router.post("/queue-calls", async (req, res) => {
         const validContacts = contacts.filter((c: Contact) => typeof c.name === "string" && typeof c.number === "string");
         if (!validContacts.length) return res.status(400).json({ error: "No valid contacts" });
 
-        // Update call times if provided
-        if (callTimeStart) user.callTimeStart = callTimeStart;
-        if (callTimeEnd) user.callTimeEnd = callTimeEnd;
-
         user.callQueue.push(...validContacts);
         await user.save();
 
@@ -42,8 +31,6 @@ router.post("/queue-calls", async (req, res) => {
 
         return res.json({
             message: `${validContacts.length} contacts queued`,
-            callTimeStart: user.callTimeStart,
-            callTimeEnd: user.callTimeEnd,
         });
     } catch (err) {
         console.error("❌ Queue error:", err instanceof Error ? err.message : String(err));
@@ -54,7 +41,7 @@ router.post("/queue-calls", async (req, res) => {
 router.post("/start-queue", async (req, res) => {
     try {
         await connectDB();
-        const { clerkId } = req.body;
+        const { clerkId } = req.body || "";
 
         if (!clerkId) {
             return res.status(400).json({ error: "clerkId is required" });
@@ -76,7 +63,9 @@ router.post("/start-queue", async (req, res) => {
 router.get("/queue-status/:clerkId", async (req, res) => {
     try {
         await connectDB();
-        const { clerkId } = req.params;
+
+        const { clerkId } = req.params || "";
+        console.log(clerkId);
 
         // If clerkId is provided, return status for specific user
         if (clerkId) {
@@ -130,6 +119,61 @@ router.post("/analytics", async (req, res) => {
     } catch (err) {
         console.error("❌ Analytics error:", err instanceof Error ? err.message : String(err));
         return res.status(500).json({ error: "Error retrieving analytics" });
+    }
+});
+
+// Set or update the weekly schedule
+router.post("/schedule", async (req, res) => {
+    try {
+        await connectDB();
+        const { clerkId, weeklySchedule } = req.body;
+
+        if (!clerkId) {
+            return res.status(400).json({ error: "clerkId is required" });
+        }
+
+        const user = await User.findById(clerkId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        // Update schedule if provided
+        if (weeklySchedule) {
+            user.weeklySchedule = weeklySchedule;
+        }
+
+
+        await user.save();
+
+        return res.json({
+            message: "Schedule updated successfully",
+            weeklySchedule: user.weeklySchedule,
+        });
+    } catch (err) {
+        console.error("❌ Schedule update error:", err instanceof Error ? err.message : String(err));
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+// Get the current schedule
+router.get("/schedule/:clerkId", async (req, res) => {
+    try {
+        await connectDB();
+        const { clerkId } = req.params;
+
+        if (!clerkId) {
+            return res.status(400).json({ error: "clerkId is required" });
+        }
+
+        const user = await User.findById(clerkId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        const currentDay = getCurrentDayOfWeek()
+        return res.json({
+            weeklySchedule: user.weeklySchedule || {},
+            currentDay,
+            currentTimeSlot: getCurrentTimeSlot(user.weeklySchedule, currentDay)
+        });
+    } catch (err) {
+        console.error("❌ Schedule get error:", err instanceof Error ? err.message : String(err));
+        return res.status(500).json({ error: "Internal Server Error" });
     }
 });
 

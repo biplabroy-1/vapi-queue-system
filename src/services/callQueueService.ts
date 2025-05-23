@@ -1,17 +1,11 @@
-// filepath: src/services/callQueueService.ts
-import { User, type IUser } from "../models/models";
+import { User, type IUser, type DailySchedule, type WeeklySchedule } from "../models/models";
 import { connectDB } from "../connectDB";
 import { makeCall, isVapiBusy } from "../vapiHelpers";
-import { isWithinCallHours, delay } from "../utils";
+import { isWithinCallHours, delay, getCurrentDayOfWeek, getCurrentTimeSlot } from "../utils";
 
-// State management for call processing
 let isProcessingQueue = false;
 
-/**
- * Process the next call in the queue
- */
 export const processNextCall = async (): Promise<void> => {
-    // Prevent multiple simultaneous queue processing
     if (isProcessingQueue) {
         return;
     }
@@ -24,7 +18,7 @@ export const processNextCall = async (): Promise<void> => {
         const user = await User.findOne({
             callQueue: { $exists: true, $not: { $size: 0 } },
         })
-            .select('_id callQueue callTimeStart callTimeEnd twilioConfig assistantId')
+            .select('_id callQueue callTimeStart callTimeEnd twilioConfig assistantId weeklySchedule')
             .lean() as IUser | null;
 
         if (!user) {
@@ -33,24 +27,61 @@ export const processNextCall = async (): Promise<void> => {
             return;
         }
 
-        const { _id, callQueue, callTimeStart, callTimeEnd, twilioConfig, assistantId } = user;
+        const { _id, callQueue, assistantId, weeklySchedule } = user;
 
-        // Check for missing config
-        if (!twilioConfig?.sid || !twilioConfig?.authToken || !twilioConfig?.phoneNumber || !assistantId) {
-            console.warn(`⚠️ User ${_id} missing required config. Skipping...`);
+        const dayOfWeek = getCurrentDayOfWeek() as keyof WeeklySchedule;
+        console.log(dayOfWeek);
+
+        const { slotName, slotData } = getCurrentTimeSlot(weeklySchedule, dayOfWeek);
+        console.log("time slot", slotName);
+        console.log("Slot Data", slotData);
+
+
+        let effectiveAssistantId = assistantId;
+        let shouldMakeCall = true;
+
+        if (weeklySchedule) {
+            if (!slotName) {
+                console.log("⏰ Current time is outside scheduled slots. Skipping call.");
+                shouldMakeCall = false;
+            } else {
+                const scheduledSlot = weeklySchedule[dayOfWeek]?.[slotName as keyof DailySchedule];
+
+                if (scheduledSlot) {
+                    // If scheduledSlot has assistantId directly, use it
+                    if (scheduledSlot.assistantId) {
+                        effectiveAssistantId = scheduledSlot.assistantId;
+                        console.log(`📅 Using scheduled assistant: ${scheduledSlot.assistantName || 'Unknown'} - ID: ${effectiveAssistantId}`);
+                    } else {
+                        console.log(`⚠️ No assistant ID in schedule for ${dayOfWeek} ${slotName}. Using default.`);
+                    }
+                } else {
+                    console.log(`⚠️ No schedule configured for ${dayOfWeek} ${slotName}. Skipping call.`);
+                    shouldMakeCall = false;
+                }
+            }
+        }
+
+        if (!effectiveAssistantId) {
+            console.warn(`⚠️ User ${_id} has no valid assistant ID. Skipping...`);
             isProcessingQueue = false;
             return;
         }
 
-        // Check call hours
-        if (!isWithinCallHours(callTimeStart, callTimeEnd)) {
+        if (!shouldMakeCall) {
+            console.log(`📅 Not scheduled to make calls at ${dayOfWeek} ${slotName || 'outside hours'}. Waiting...`);
+            isProcessingQueue = false;
+            await delay(600);
+            return processNextCall();
+        }
+
+        if (!isWithinCallHours(slotData.callTimeStart, slotData.callTimeEnd)) {
             console.log(`⏰ Outside calling hours for user ${_id}. Waiting...`);
             isProcessingQueue = false;
             await delay(600);
             return processNextCall();
         }
 
-        // Check VAPI availability
         if (await isVapiBusy()) {
             console.log("⏳ VAPI busy. Retrying in 15s...");
             isProcessingQueue = false;
@@ -59,6 +90,7 @@ export const processNextCall = async (): Promise<void> => {
         }
 
         const availableSlots = Math.min(MAX_CONCURRENT_CALLS - activeCallCount, callQueue.length);
+
         if (availableSlots <= 0) {
             console.log("📞 Max concurrent calls reached or no calls to process. Retrying in 15s...");
             isProcessingQueue = false;
@@ -82,7 +114,7 @@ export const processNextCall = async (): Promise<void> => {
 
                 if (!updated) continue;
 
-                await makeCall(user, call);
+                await makeCall(user, call, effectiveAssistantId);
 
                 await User.findOneAndUpdate(
                     {

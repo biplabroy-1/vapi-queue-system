@@ -23,8 +23,11 @@ export const isVapiBusy = async (): Promise<boolean> => {
 
 export const makeCall = async (
     user: IUser,
-    call: { name: string; number: string }
+    call: { name: string; number: string },
+    customAssistantId?: string
 ) => {
+    const assistantId = customAssistantId || user.assistantId;
+
     const res = await fetch("https://api.vapi.ai/call", {
         method: "POST",
         headers: {
@@ -32,7 +35,7 @@ export const makeCall = async (
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            assistantId: user.assistantId,
+            assistantId: assistantId,
             phoneNumber: {
                 twilioAccountSid: user.twilioConfig.sid,
                 twilioPhoneNumber: user.twilioConfig.phoneNumber,
