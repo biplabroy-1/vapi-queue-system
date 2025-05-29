@@ -6,19 +6,16 @@ import { isWithinCallHours, delay, getCurrentDayOfWeek, getCurrentTimeSlot } fro
 let isProcessingQueue = false;
 
 export const processNextCall = async (): Promise<void> => {
-    if (isProcessingQueue) {
-        return;
-    }
-
+    if (isProcessingQueue) return;
     isProcessingQueue = true;
 
     try {
         await connectDB();
 
         const user = await User.findOne({
-            callQueue: { $exists: true, $not: { $size: 0 } },
+            callQueues: { $exists: true },
         })
-            .select('_id callQueue callTimeStart callTimeEnd twilioConfig assistantId weeklySchedule')
+            .select('_id callQueues callQueuesDone twilioConfig weeklySchedule')
             .lean() as IUser | null;
 
         if (!user) {
@@ -27,126 +24,105 @@ export const processNextCall = async (): Promise<void> => {
             return;
         }
 
-        const { _id, callQueue, assistantId, weeklySchedule } = user;
-
+        const userId = user._id;
+        const callQueues = user.callQueues || {};
+        const weeklySchedule = user.weeklySchedule;
+        console.log(weeklySchedule);
+        
         const dayOfWeek = getCurrentDayOfWeek() as keyof WeeklySchedule;
         console.log(dayOfWeek);
+        
+        const {slotName,slotData} = getCurrentTimeSlot(weeklySchedule, dayOfWeek);
+    
 
-        const { slotName, slotData } = getCurrentTimeSlot(weeklySchedule, dayOfWeek);
-        console.log("time slot", slotName);
-        console.log("Slot Data", slotData);
-
-
-        let effectiveAssistantId = assistantId;
-        let shouldMakeCall = true;
-
-        if (weeklySchedule) {
-            if (!slotName) {
-                console.log("⏰ Current time is outside scheduled slots. Skipping call.");
-                shouldMakeCall = false;
-            } else {
-                const scheduledSlot = weeklySchedule[dayOfWeek]?.[slotName as keyof DailySchedule];
-
-                if (scheduledSlot) {
-                    // If scheduledSlot has assistantId directly, use it
-                    if (scheduledSlot.assistantId) {
-                        effectiveAssistantId = scheduledSlot.assistantId;
-                        console.log(`📅 Using scheduled assistant: ${scheduledSlot.assistantName || 'Unknown'} - ID: ${effectiveAssistantId}`);
-                    } else {
-                        console.log(`⚠️ No assistant ID in schedule for ${dayOfWeek} ${slotName}. Using default.`);
-                    }
-                } else {
-                    console.log(`⚠️ No schedule configured for ${dayOfWeek} ${slotName}. Skipping call.`);
-                    shouldMakeCall = false;
-                }
-            }
-        }
-
-        if (!effectiveAssistantId) {
-            console.warn(`⚠️ User ${_id} has no valid assistant ID. Skipping...`);
+        if (!slotName || !slotData || !slotData.assistantId) {
+            console.log(`⚠️ No valid time slot or assistant found for ${dayOfWeek} ${slotName || "unknown"}.`);
             isProcessingQueue = false;
-            return;
+            await delay(600);
+            return processNextCall();
         }
 
-        if (!shouldMakeCall) {
-            console.log(`📅 Not scheduled to make calls at ${dayOfWeek} ${slotName || 'outside hours'}. Waiting...`);
+        const assistantId = slotData.assistantId;
+        const queue = callQueues[assistantId];
+
+        if (!queue || queue.length === 0) {
+            console.log(`📭 No calls in queue for assistant ${assistantId}.`);
             isProcessingQueue = false;
             await delay(600);
             return processNextCall();
         }
 
         if (!isWithinCallHours(slotData.callTimeStart, slotData.callTimeEnd)) {
-            console.log(`⏰ Outside calling hours for user ${_id}. Waiting...`);
+            console.log(`⏰ Outside calling hours for assistant ${assistantId}.`);
             isProcessingQueue = false;
             await delay(600);
             return processNextCall();
         }
 
         if (await isVapiBusy()) {
-            console.log("⏳ VAPI busy. Retrying in 15s...");
+            console.log("⏳ VAPI is busy. Retrying in 15s...");
             isProcessingQueue = false;
             await delay(15);
             return processNextCall();
         }
 
-        const availableSlots = Math.min(MAX_CONCURRENT_CALLS - activeCallCount, callQueue.length);
+        const nextCall = queue[0];
 
-        if (availableSlots <= 0) {
-            console.log("📞 Max concurrent calls reached or no calls to process. Retrying in 15s...");
+        const updated = await User.findOneAndUpdate(
+            { _id: userId },
+            {
+                $pull: { [`callQueues.${assistantId}`]: { name: nextCall.name, number: nextCall.number } },
+                $push: { callQueuesDone: { ...nextCall, status: "pending_initiation" } },
+            },
+            { new: true }
+        );
+
+        if (!updated) {
+            console.warn(`⚠️ Failed to update user queue for assistant ${assistantId}.`);
             isProcessingQueue = false;
-            await delay(15);
-            return processNextCall();
+            return;
         }
 
-        const batch = callQueue.slice(0, availableSlots);
-        console.log(`📲 Processing ${batch.length} call(s) for user ${_id}`);
+        try {
+            await makeCall(user, nextCall, assistantId);
 
-        for (const call of batch) {
-            try {
-                const updated = await User.findOneAndUpdate(
-                    { _id, "callQueue.0": call },
-                    {
-                        $pop: { callQueue: -1 },
-                        $push: { callQueueDone: { ...call, status: "pending_initiation" } },
+            await User.updateOne(
+                {
+                    _id: userId,
+                    callQueuesDone: {
+                        $elemMatch: {
+                            name: nextCall.name,
+                            number: nextCall.number,
+                            status: "pending_initiation",
+                        },
                     },
-                    { new: true }
-                );
+                },
+                { $set: { "callQueuesDone.$.status": "initiated" } }
+            );
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`❌ Call to ${nextCall.name} failed: ${msg}`);
 
-                if (!updated) continue;
-
-                await makeCall(user, call, effectiveAssistantId);
-
-                await User.findOneAndUpdate(
-                    {
-                        _id,
-                        "callQueueDone": {
-                            $elemMatch: {
-                                name: call.name,
-                                number: call.number,
-                                status: "pending_initiation"
-                            }
-                        }
+            await User.updateOne(
+                {
+                    _id: userId,
+                    callQueuesDone: {
+                        $elemMatch: {
+                            name: nextCall.name,
+                            number: nextCall.number,
+                            status: "pending_initiation",
+                        },
                     },
-                    {
-                        $set: { "callQueueDone.$.status": "initiated" },
-                    }
-                );
-            } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                console.error(`❌ Call to ${call.name}: ${msg}`);
-
-                await User.updateOne(
-                    { _id, "callQueueDone": { $elemMatch: { name: call.name, number: call.number, status: "pending_initiation" } } },
-                    { $set: { "callQueueDone.$.status": "failed_to_initiate" } }
-                );
-            }
+                },
+                { $set: { "callQueuesDone.$.status": "failed_to_initiate" } }
+            );
         }
 
         isProcessingQueue = false;
         await delay(5);
         return processNextCall();
     } catch (err) {
-        console.error(`❌ Processing error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`❌ Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
         isProcessingQueue = false;
         await delay(30);
         return processNextCall();

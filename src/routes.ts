@@ -9,39 +9,56 @@ const router = express.Router();
 
 // Queue calls route handler
 router.post("/queue-calls", async (req, res) => {
-    const { clerkId, contacts } = req.body;
+    const { clerkId, contacts, assistantId } = req.body;
 
-    if (!clerkId || !Array.isArray(contacts)) {
-        return res.status(400).json({ error: "clerkId and contacts[] required" });
+    if (!clerkId || !Array.isArray(contacts) || !assistantId) {
+        return res.status(400).json({ error: "clerkId, assistantId, and contacts[] are required" });
     }
-
 
     try {
         await connectDB();
         const user = await User.findById(clerkId);
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        const validContacts = contacts.filter((c: Contact) => typeof c.name === "string" && typeof c.number === "string");
-        if (!validContacts.length) return res.status(400).json({ error: "No valid contacts" });
+        const validContacts = contacts.filter(
+            (c: { name: string; number: string }) =>
+                typeof c.name === "string" && typeof c.number === "string"
+        );
 
-        user.callQueue.push(...validContacts);
+        if (!validContacts.length) {
+            return res.status(400).json({ error: "No valid contacts" });
+        }
+
+        // Ensure callQueues is a plain object
+        if (!user.callQueues || typeof user.callQueues !== "object") {
+            user.callQueues = {};
+        }
+
+        if (!user.callQueues[assistantId]) {
+            user.callQueues[assistantId] = [];
+        }
+
+        user.callQueues[assistantId].push(...validContacts);
+        user.markModified('callQueues');
         await user.save();
 
         processNextCall();
 
         return res.json({
-            message: `${validContacts.length} contacts queued`,
+            message: `${validContacts.length} contacts queued for assistant ${assistantId}`,
         });
     } catch (err) {
         console.error("❌ Queue error:", err instanceof Error ? err.message : String(err));
         return res.status(500).json({ error: "Internal Server Error" });
     }
 });
+
+
 // Start queue route handler - only starts the queue
 router.post("/start-queue", async (req, res) => {
     try {
         await connectDB();
-        const { clerkId } = req.body || "";
+        const { clerkId } = req.body;
 
         if (!clerkId) {
             return res.status(400).json({ error: "clerkId is required" });
@@ -49,10 +66,10 @@ router.post("/start-queue", async (req, res) => {
 
         const user = await User.findById(clerkId);
         if (!user) return res.status(404).json({ error: "User not found" });
-        if (!user.callQueue.length) return res.status(400).json({ error: "No calls in queue" });
+        if (!user.callQueues) return res.status(400).json({ error: "No calls in queue" });
 
         processNextCall();
-        return res.json({ message: "Queue started", queueLength: user.callQueue.length });
+        return res.json({ message: "Queue started", queueLength: user.callQueues });
     } catch (err) {
         console.error("❌ Start queue error:", err instanceof Error ? err.message : String(err));
         return res.status(500).json({ error: "Internal Server Error" });

@@ -53,7 +53,7 @@ export const getCurrentTimeSlot = (weeklySchedule: any, dayOfWeek: string): any 
         }
     }
 
-    return null; // No matching slot
+    return { slotName:null, slotData:null }; // No matching slot
 };
 
 
