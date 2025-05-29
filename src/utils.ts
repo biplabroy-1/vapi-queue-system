@@ -12,7 +12,7 @@ export const isWithinCallHours = (startTime: string, endTime: string): boolean =
 
 export const delay = (seconds: number) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
-function toHumanReadableDate(isoString: string, locale = "default", timeZone?: string): string {
+export default function toHumanReadableDate(isoString: string, locale = "default", timeZone?: string): string {
     try {
         const date = new Date(isoString);
 
@@ -65,6 +65,6 @@ export const getCurrentDayOfWeek = (): DayOfWeek => {
 
 // Example usage:
 const iso = new Date().toISOString();
-console.log(toHumanReadableDate(iso));                  // Local time
-console.log(toHumanReadableDate(iso, "en-US", "UTC")); // UTC
-console.log(toHumanReadableDate(iso, "en-IN", "Asia/Kolkata")); // IST
+console.log("Local Time", toHumanReadableDate(iso));                  // Local time
+console.log("UTC Time", toHumanReadableDate(iso, "en-US", "UTC")); // UTC
+console.log("IST Time", toHumanReadableDate(iso, "en-IN", "Asia/Kolkata")); // IST
