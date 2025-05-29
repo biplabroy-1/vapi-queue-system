@@ -13,9 +13,9 @@ export const processNextCall = async (): Promise<void> => {
         await connectDB();
 
         const user = await User.findOne({
-            callQueues: { $exists: true },
+            callQueue: { $exists: true },
         })
-            .select('_id callQueues callQueuesDone twilioConfig weeklySchedule')
+            .select('_id callQueue callQueueDone twilioConfig weeklySchedule')
             .lean() as IUser | null;
 
         if (!user) {
@@ -25,15 +25,15 @@ export const processNextCall = async (): Promise<void> => {
         }
 
         const userId = user._id;
-        const callQueues = user.callQueues || {};
+        const callQueues = user.callQueue || {};
         const weeklySchedule = user.weeklySchedule;
         console.log(weeklySchedule);
-        
+
         const dayOfWeek = getCurrentDayOfWeek() as keyof WeeklySchedule;
         console.log(dayOfWeek);
-        
-        const {slotName,slotData} = getCurrentTimeSlot(weeklySchedule, dayOfWeek);
-    
+
+        const { slotName, slotData } = getCurrentTimeSlot(weeklySchedule, dayOfWeek);
+
 
         if (!slotName || !slotData || !slotData.assistantId) {
             console.log(`⚠️ No valid time slot or assistant found for ${dayOfWeek} ${slotName || "unknown"}.`);
@@ -71,8 +71,18 @@ export const processNextCall = async (): Promise<void> => {
         const updated = await User.findOneAndUpdate(
             { _id: userId },
             {
-                $pull: { [`callQueues.${assistantId}`]: { name: nextCall.name, number: nextCall.number } },
-                $push: { callQueuesDone: { ...nextCall, status: "pending_initiation" } },
+                $pull: {
+                    [`callQueue.${assistantId}`]: {
+                        name: nextCall.name,
+                        number: nextCall.number
+                    }
+                },
+                $push: {
+                    [`callQueueDone.${assistantId}`]: {
+                        ...nextCall,
+                        status: "pending_initiation"
+                    }
+                }
             },
             { new: true }
         );
@@ -89,15 +99,19 @@ export const processNextCall = async (): Promise<void> => {
             await User.updateOne(
                 {
                     _id: userId,
-                    callQueuesDone: {
+                    [`callQueueDone.${assistantId}`]: {
                         $elemMatch: {
                             name: nextCall.name,
                             number: nextCall.number,
-                            status: "pending_initiation",
-                        },
-                    },
+                            status: "pending_initiation"
+                        }
+                    }
                 },
-                { $set: { "callQueuesDone.$.status": "initiated" } }
+                {
+                    $set: {
+                        [`callQueueDone.${assistantId}.$.status`]: "initiated"
+                    }
+                }
             );
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -106,21 +120,26 @@ export const processNextCall = async (): Promise<void> => {
             await User.updateOne(
                 {
                     _id: userId,
-                    callQueuesDone: {
+                    [`callQueueDone.${assistantId}`]: {
                         $elemMatch: {
                             name: nextCall.name,
                             number: nextCall.number,
-                            status: "pending_initiation",
-                        },
-                    },
+                            status: "pending_initiation"
+                        }
+                    }
                 },
-                { $set: { "callQueuesDone.$.status": "failed_to_initiate" } }
+                {
+                    $set: {
+                        [`callQueueDone.${assistantId}.$.status`]: "failed_to_initiate"
+                    }
+                }
             );
         }
 
         isProcessingQueue = false;
         await delay(5);
         return processNextCall();
+
     } catch (err) {
         console.error(`❌ Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
         isProcessingQueue = false;

@@ -51,8 +51,8 @@ export interface IUser extends Document {
   content: string;
 
   // New structure for assistant queues
-  callQueues: Record<string, Contact[]>; // assistantId: Contact[]
-  callQueuesDone: Record<string, (Contact & { status?: string })[]>;
+  callQueue: Record<string, Contact[]>; // assistantId: Contact[]
+  callQueueDone: Record<string, (Contact & { status?: string })[]>;
 
   fullCallData?: Record<string, any>[];
 
@@ -133,14 +133,14 @@ const UserSchema = new Schema<IUser>(
     assistantId: { type: String, required: true },
     content: { type: String },
 
-    callQueues: {
-        type: Object,
-        default: () => ({})
-      },
+    callQueue: {
+      type: Object,
+      default: () => ({})
+    },
 
-    callQueuesDone: {
-        type: Object,
-        default: () => ({})
+    callQueueDone: {
+      type: Object,
+      default: () => ({})
     },
 
     fullCallData: [FullCallDataSchema],

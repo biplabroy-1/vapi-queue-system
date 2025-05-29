@@ -29,17 +29,17 @@ router.post("/queue-calls", async (req, res) => {
             return res.status(400).json({ error: "No valid contacts" });
         }
 
-        // Ensure callQueues is a plain object
-        if (!user.callQueues || typeof user.callQueues !== "object") {
-            user.callQueues = {};
+        // Ensure callQueue is a plain object
+        if (!user.callQueue || typeof user.callQueue !== "object") {
+            user.callQueue = {};
         }
 
-        if (!user.callQueues[assistantId]) {
-            user.callQueues[assistantId] = [];
+        if (!user.callQueue[assistantId]) {
+            user.callQueue[assistantId] = [];
         }
 
-        user.callQueues[assistantId].push(...validContacts);
-        user.markModified('callQueues');
+        user.callQueue[assistantId].push(...validContacts);
+        user.markModified('callQueue');
         await user.save();
 
         processNextCall();
@@ -66,10 +66,10 @@ router.post("/start-queue", async (req, res) => {
 
         const user = await User.findById(clerkId);
         if (!user) return res.status(404).json({ error: "User not found" });
-        if (!user.callQueues) return res.status(400).json({ error: "No calls in queue" });
+        if (!user.callQueue) return res.status(400).json({ error: "No calls in queue" });
 
         processNextCall();
-        return res.json({ message: "Queue started", queueLength: user.callQueues });
+        return res.json({ message: "Queue started", queueLength: user.callQueue });
     } catch (err) {
         console.error("❌ Start queue error:", err instanceof Error ? err.message : String(err));
         return res.status(500).json({ error: "Internal Server Error" });
