@@ -1,6 +1,6 @@
 // filepath: src/webhooks/endOfCallReport.ts
 import { connectDB } from "../connectDB";
-import { User } from "../models/models";
+import User from "../models/models";
 
 export enum VapiWebhookEnum {
     ASSISTANT_REQUEST = "assistant-request",

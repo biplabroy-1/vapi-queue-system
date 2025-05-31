@@ -1,4 +1,4 @@
-import { User, type IUser, type DailySchedule, type WeeklySchedule } from "../models/models";
+import User, { type IUser, type WeeklySchedule } from "../models/models";
 import { connectDB } from "../connectDB";
 import { makeCall, isVapiBusy } from "../vapiHelpers";
 import { isWithinCallHours, delay, getCurrentDayOfWeek, getCurrentTimeSlot } from "../utils";

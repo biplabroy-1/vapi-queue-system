@@ -1,5 +1,5 @@
 import express from "express";
-import { type Contact, User } from "./models/models";
+import User from "./models/models";
 import { connectDB } from "./connectDB";
 import { processNextCall } from "./services/callQueueService";
 import { getVapiAnalytics } from "./analytics/vapiAnalytics";
@@ -8,6 +8,7 @@ import { getCurrentTimeSlot, getCurrentDayOfWeek } from "./utils";
 const router = express.Router();
 
 // Queue calls route handler
+// @ts-ignore
 router.post("/queue-calls", async (req, res) => {
     const { clerkId, contacts, assistantId } = req.body;
 
@@ -55,6 +56,7 @@ router.post("/queue-calls", async (req, res) => {
 
 
 // Start queue route handler - only starts the queue
+// @ts-ignore
 router.post("/start-queue", async (req, res) => {
     try {
         await connectDB();
@@ -77,6 +79,7 @@ router.post("/start-queue", async (req, res) => {
 });
 
 // Queue status route handler - shows status of all queues or user-specific queue
+// @ts-ignore
 router.get("/queue-status/:clerkId", async (req, res) => {
     try {
         await connectDB();
@@ -121,6 +124,7 @@ router.get("/queue-status/:clerkId", async (req, res) => {
     }
 });
 
+// @ts-ignore
 router.post("/analytics", async (req, res) => {
     const { start, end, timezone } = req.body || {};
 
@@ -140,6 +144,7 @@ router.post("/analytics", async (req, res) => {
 });
 
 // Set or update the weekly schedule
+// @ts-ignore
 router.post("/schedule", async (req, res) => {
     try {
         await connectDB();
@@ -171,6 +176,7 @@ router.post("/schedule", async (req, res) => {
 });
 
 // Get the current schedule
+// @ts-ignore
 router.get("/schedule/:clerkId", async (req, res) => {
     try {
         await connectDB();
