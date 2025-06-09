@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+
 export const isWithinCallHours = (startTime: string, endTime: string): boolean => {
     const now = new Date();
     const currentTime =
@@ -10,7 +12,7 @@ export const isWithinCallHours = (startTime: string, endTime: string): boolean =
 
 export const delay = (seconds: number) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
-function toHumanReadableDate(isoString: string, locale = "default", timeZone?: string): string {
+export default function toHumanReadableDate(isoString: string, locale = "default", timeZone?: string): string {
     try {
         const date = new Date(isoString);
 
@@ -32,8 +34,37 @@ function toHumanReadableDate(isoString: string, locale = "default", timeZone?: s
     }
 }
 
+// Schedule utility functions
+export type TimeSlot = 'morning' | 'afternoon' | 'evening' | null;
+export type DayOfWeek = 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
+
+export const getCurrentTimeSlot = (weeklySchedule: any, dayOfWeek: string): any | null => {
+    const now = dayjs();
+    const currentTime = now.format("HH:mm");
+
+    const slots = weeklySchedule?.[dayOfWeek];
+    if (!slots) return null;
+
+    for (const [slotName, slotData] of Object.entries(slots)) {
+        const { callTimeStart, callTimeEnd } = slotData as any;
+
+        if (callTimeStart && callTimeEnd && currentTime >= callTimeStart && currentTime <= callTimeEnd) {
+            return { slotName, slotData };
+        }
+    }
+
+    return { slotName:null, slotData:null }; // No matching slot
+};
+
+
+export const getCurrentDayOfWeek = (): DayOfWeek => {
+    const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayIndex = new Date().getDay();
+    return days[dayIndex];
+};
+
 // Example usage:
 const iso = new Date().toISOString();
-console.log(toHumanReadableDate(iso));                  // Local time
-console.log(toHumanReadableDate(iso, "en-US", "UTC")); // UTC
-console.log(toHumanReadableDate(iso, "en-IN", "Asia/Kolkata")); // IST
+console.log("Local Time", toHumanReadableDate(iso));                  // Local time
+console.log("UTC Time", toHumanReadableDate(iso, "en-US", "UTC")); // UTC
+console.log("IST Time", toHumanReadableDate(iso, "en-IN", "Asia/Kolkata")); // IST

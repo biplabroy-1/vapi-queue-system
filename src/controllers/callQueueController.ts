@@ -28,8 +28,13 @@ export const queueCalls = async (req: Request, res: Response) => {
 
         const validContacts = contacts.filter((c: Contact) => typeof c.name === "string" && typeof c.number === "string");
         if (!validContacts.length) return res.status(400).json({ error: "No valid contacts" });
+        const { twilioConfig } = user
+        // Check for missing config
+        if (!twilioConfig?.sid || !twilioConfig?.authToken || !twilioConfig?.phoneNumber) {
+            console.warn(`⚠️ User ${user.id} missing required Twilio config. Skipping...`);
+            return res.json({ message: "⚠️ User ${ user.id } missing required Twilio config." })
+        }
 
-        // Update call times if provided
         if (callTimeStart) user.callTimeStart = callTimeStart;
         if (callTimeEnd) user.callTimeEnd = callTimeEnd;
 

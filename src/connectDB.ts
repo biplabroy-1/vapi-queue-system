@@ -17,3 +17,10 @@ export const connectDB = async () => {
         }
     }
 };
+
+export const getMongoServerTime = async () => {
+    const adminDb = mongoose.connection.db?.admin();
+    const result = await adminDb?.command({ isMaster: 1 }); // or { hello: 1 }
+    const serverTime = result?.localTime;
+    return serverTime ? serverTime.toISOString() : null;
+};

@@ -2,20 +2,21 @@ import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
-import { connectDB } from "./src/connectDB";
+import { connectDB, getMongoServerTime } from "./src/connectDB";
 import apiRoutes from "./src/routes";
 import webhookRoutes from "./src/webhooks";
 import { config, validateEnv } from "./src/config";
-
+import toHumanReadableDate from "./src/utils";
 // Configure environment variables
 dotenv.config();
+
 
 declare global {
   var activeCallCount: number;
   var MAX_CONCURRENT_CALLS: number;
 }
 global.activeCallCount = 0;
-global.MAX_CONCURRENT_CALLS = 2
+global.MAX_CONCURRENT_CALLS = 1
 
 // Initialize express
 const app = express();
@@ -48,6 +49,10 @@ const startServer = async () => {
   try {
     // Connect to database
     await connectDB();
+    // Using IIFE to handle async code
+    (async () => {
+      console.log("DB Time", toHumanReadableDate(await getMongoServerTime())) // IST
+    })();
 
     // Start the server
     app.listen(PORT, () => {

@@ -7,6 +7,7 @@ const router = express.Router();
 /**
  * Main webhook handler that routes different webhook types to their specific handlers
  */
+// @ts-ignore
 router.post("/", async (req: Request, res: Response) => {
     try {
         const payload = req.body;

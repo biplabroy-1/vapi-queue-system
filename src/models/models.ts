@@ -1,76 +1,154 @@
 import mongoose, { Schema, type Document } from "mongoose";
 
-// Subinterfaces
+/** ────── Subinterfaces ────── **/
 interface TwilioConfig {
-    sid: string;
-    authToken: string;
-    phoneNumber: string;
+  sid: string;
+  authToken: string;
+  phoneNumber: string;
 }
 
 export interface Contact {
-    name: string;
-    number: string;
+  name: string;
+  number: string;
+  assistantId: string;
+  status?: string;
 }
 
+export interface ScheduleSlot {
+  assistantId: string;
+  assistantName: string;
+  callTimeStart: string;
+  callTimeEnd: string;
+}
+
+export interface DailySchedule {
+  morning: ScheduleSlot;
+  afternoon: ScheduleSlot;
+  evening: ScheduleSlot;
+}
+
+export interface WeeklySchedule {
+  sunday: DailySchedule;
+  monday: DailySchedule;
+  tuesday: DailySchedule;
+  wednesday: DailySchedule;
+  thursday: DailySchedule;
+  friday: DailySchedule;
+  saturday: DailySchedule;
+}
+
+/** ────── Main User Interface ────── **/
 export interface IUser extends Document {
-    _id: string;
-    clerkId: string;
-    email: string;
-    firstName?: string;
-    lastName?: string;
-    profileImageUrl?: string;
-    phoneNumber: string;
-    twilioConfig: TwilioConfig;
-    assistantId: string;
-    content: string;
-    callQueue: Contact[];
-    callQueueDone: (Contact & { status?: string })[];
-    fullCallData?: Record<string, any>[];
-    callTimeStart: string;
-    callTimeEnd: string;
-    createdAt: Date;
-    updatedAt: Date;
+  _id: string;
+  clerkId: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  phoneNumber: string;
+  twilioConfig: TwilioConfig;
+  assistantId: string;
+  content: string;
+
+  // New structure for assistant queues
+  callQueue: Record<string, Contact[]>; // assistantId: Contact[]
+  callQueueDone: Record<string, (Contact & { status?: string })[]>;
+
+  fullCallData?: Record<string, any>[];
+
+  defaultCallTimeStart: string;
+  defaultCallTimeEnd: string;
+
+  weeklySchedule?: WeeklySchedule;
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// Schema Definitions
+/** ────── Schema Definitions ────── **/
 
-const ContactSchema = new Schema(
-    {
-        name: { type: String, required: true },
-        number: { type: String, required: true },
-        status: { type: String },
-    },
-    { _id: false }
+const ContactSchema = new Schema<Contact>(
+  {
+    name: { type: String, required: true },
+    number: { type: String, required: true },
+    assistantId: { type: String, required: true },
+    status: { type: String }
+  },
+  { _id: false }
 );
 
-const fullCallDataSchema = new Schema({}, { strict: false, _id: false });
-
-const UserSchema: Schema = new Schema(
-    {
-        _id: { type: String, required: true },
-        clerkId: { type: String, required: true, unique: true },
-        email: { type: String, required: true, unique: true },
-        firstName: { type: String },
-        lastName: { type: String },
-        profileImageUrl: { type: String },
-        phoneNumber: { type: String },
-        twilioConfig: {
-            sid: { type: String },
-            authToken: { type: String },
-            phoneNumber: { type: String },
-        },
-        assistantId: { type: String },
-        content: { type: String },
-
-        callQueue: [ContactSchema],
-        callQueueDone: [ContactSchema],
-        fullCallData: [fullCallDataSchema],
-
-        callTimeStart: { type: String, default: "03:30" },
-        callTimeEnd: { type: String, default: "05:30" },
-    },
-    { timestamps: true }
+const ScheduleSlotSchema = new Schema<ScheduleSlot>(
+  {
+    assistantName: { type: String, required: true },
+    assistantId: { type: String, required: true },
+    callTimeStart: { type: String, required: true },
+    callTimeEnd: { type: String, required: true }
+  },
+  { _id: false }
 );
 
-// Export model
-export const User = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
+const DailyScheduleSchema = new Schema<DailySchedule>(
+  {
+    morning: { type: ScheduleSlotSchema, required: true },
+    afternoon: { type: ScheduleSlotSchema, required: true },
+    evening: { type: ScheduleSlotSchema, required: true }
+  },
+  { _id: false }
+);
+
+const WeeklyScheduleSchema = new Schema<WeeklySchedule>(
+  {
+    sunday: { type: DailyScheduleSchema, required: true },
+    monday: { type: DailyScheduleSchema, required: true },
+    tuesday: { type: DailyScheduleSchema, required: true },
+    wednesday: { type: DailyScheduleSchema, required: true },
+    thursday: { type: DailyScheduleSchema, required: true },
+    friday: { type: DailyScheduleSchema, required: true },
+    saturday: { type: DailyScheduleSchema, required: true }
+  },
+  { _id: false }
+);
+
+const FullCallDataSchema = new Schema({}, { strict: false, _id: false });
+
+const TwilioConfigSchema = new Schema<TwilioConfig>(
+  {
+    sid: { type: String, required: true },
+    authToken: { type: String, required: true },
+    phoneNumber: { type: String, required: true }
+  },
+  { _id: false }
+);
+
+const UserSchema = new Schema<IUser>(
+  {
+    _id: { type: String, required: true },
+    clerkId: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true },
+    firstName: String,
+    lastName: String,
+    profileImageUrl: String,
+
+    twilioConfig: { type: TwilioConfigSchema, required: true },
+    assistantId: { type: String, required: true },
+    content: { type: String },
+
+    callQueue: {
+      type: Object,
+      default: () => ({})
+    },
+
+    callQueueDone: {
+      type: Object,
+      default: () => ({})
+    },
+
+    fullCallData: [FullCallDataSchema],
+
+    weeklySchedule: { type: WeeklyScheduleSchema }
+  },
+  { timestamps: true }
+);
+
+const User = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
+export default User
