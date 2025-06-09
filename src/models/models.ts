@@ -98,13 +98,13 @@ const DailyScheduleSchema = new Schema<DailySchedule>(
 
 const WeeklyScheduleSchema = new Schema<WeeklySchedule>(
   {
-    sunday: { type: DailyScheduleSchema, required: true },
-    monday: { type: DailyScheduleSchema, required: true },
-    tuesday: { type: DailyScheduleSchema, required: true },
-    wednesday: { type: DailyScheduleSchema, required: true },
-    thursday: { type: DailyScheduleSchema, required: true },
-    friday: { type: DailyScheduleSchema, required: true },
-    saturday: { type: DailyScheduleSchema, required: true }
+    sunday: { type: DailyScheduleSchema },
+    monday: { type: DailyScheduleSchema },
+    tuesday: { type: DailyScheduleSchema },
+    wednesday: { type: DailyScheduleSchema },
+    thursday: { type: DailyScheduleSchema },
+    friday: { type: DailyScheduleSchema },
+    saturday: { type: DailyScheduleSchema }
   },
   { _id: false }
 );
