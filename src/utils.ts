@@ -38,23 +38,32 @@ export default function toHumanReadableDate(isoString: string, locale = "default
 export type TimeSlot = 'morning' | 'afternoon' | 'evening' | null;
 export type DayOfWeek = 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
 
-export const getCurrentTimeSlot = (weeklySchedule: any, dayOfWeek: string): any | null => {
+export const getCurrentTimeSlot = (
+    weeklySchedule: any,
+    dayOfWeek: string
+): { slotName: string | null; slotData: any | null } => {
     const now = dayjs();
     const currentTime = now.format("HH:mm");
 
     const slots = weeklySchedule?.[dayOfWeek];
-    if (!slots) return null;
+    if (!slots) return { slotName: null, slotData: null };
 
     for (const [slotName, slotData] of Object.entries(slots)) {
         const { callTimeStart, callTimeEnd } = slotData as any;
 
-        if (callTimeStart && callTimeEnd && currentTime >= callTimeStart && currentTime <= callTimeEnd) {
+        if (
+            callTimeStart &&
+            callTimeEnd &&
+            currentTime >= callTimeStart &&
+            currentTime <= callTimeEnd
+        ) {
             return { slotName, slotData };
         }
     }
 
-    return { slotName:null, slotData:null }; // No matching slot
+    return { slotName: null, slotData: null };
 };
+
 
 
 export const getCurrentDayOfWeek = (): DayOfWeek => {
