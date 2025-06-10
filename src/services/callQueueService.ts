@@ -27,11 +27,7 @@ export const processNextCall = async (): Promise<void> => {
         const userId = user._id;
         const callQueues = user.callQueue || {};
         const weeklySchedule = user.weeklySchedule;
-        console.log(weeklySchedule);
-
         const dayOfWeek = getCurrentDayOfWeek() as keyof WeeklySchedule;
-        console.log(dayOfWeek);
-
         const { slotName, slotData } = getCurrentTimeSlot(weeklySchedule, dayOfWeek);
 
 
@@ -113,9 +109,8 @@ export const processNextCall = async (): Promise<void> => {
                     }
                 }
             );
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`❌ Call to ${nextCall.name} failed: ${msg}`);
+        } catch (err: any) {
+            console.error(`❌ Call to ${nextCall.name} failed: ${err}`);
 
             await User.updateOne(
                 {
@@ -130,7 +125,8 @@ export const processNextCall = async (): Promise<void> => {
                 },
                 {
                     $set: {
-                        [`callQueueDone.${assistantId}.$.status`]: "failed_to_initiate"
+                        [`callQueueDone.${assistantId}.$.status`]: "failed_to_initiate",
+                        [`callQueueDone.${assistantId}.$.reason`]: err.message
                     }
                 }
             );
