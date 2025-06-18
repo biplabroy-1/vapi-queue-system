@@ -90,7 +90,7 @@ export const endOfCallReportHandler = async (payload: any): Promise<void> => {
     // Find user by assistantId directly using dot notation for embedded documents
     // and efficient indexing if CallQueue is structured appropriately.
     // Assuming CallQueue stores assistantId as keys directly or in a nested structure.
-    const user = await User.findOne({ [`CallQueue.${assistantId}`]: { $exists: true } });
+    const user = await User.findOne({ CallQueue: { $elemMatch: { assistantId: assistantId } } });
 
     if (!user) {
       console.warn(`⚠️ No user found with assistant ID: ${assistantId}`);
