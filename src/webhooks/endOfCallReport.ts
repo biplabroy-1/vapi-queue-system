@@ -69,45 +69,46 @@ export enum VapiWebhookEnum {
  * @returns A Promise that resolves when the end of call report has been processed
  */
 export const endOfCallReportHandler = async (payload: any): Promise<void> => {
-  if (!payload) {
-    console.warn("⚠️ Invalid or missing payload in endOfCallReportHandler.");
-    return;
-  }
-
-  const { message } = payload;
-  const assistantId = message?.assistant?.id;
-
-  if (!assistantId) {
-    console.warn("⚠️ No assistant ID found in payload message.");
-    return;
-  }
-
-  try {
-    // Connect to DB once, ideally this is handled by a global middleware or service
-    // If connectDB is idempotent, it's fine here, otherwise consider moving it.
-    await connectDB(); 
-
-    // Find user by assistantId directly using dot notation for embedded documents
-    // and efficient indexing if CallQueue is structured appropriately.
-    // Assuming CallQueue stores assistantId as keys directly or in a nested structure.
-    const user = await User.findOne({ CallQueue: { $elemMatch: { assistantId: assistantId } } });
-
-    if (!user) {
-      console.warn(`⚠️ No user found with assistant ID: ${assistantId}`);
-      return;
+    if (!payload) {
+        console.warn("⚠️ Invalid or missing payload in endOfCallReportHandler.");
+        return;
     }
 
-    // Push call report into fullCallData
-    await User.findByIdAndUpdate(
-      user._id,
-      { $push: { fullCallData: message } },
-      { new: true } // Return the updated document
-    );
+    const { message } = payload;
+    const assistantId = message?.assistant?.id;
 
-    console.log(`✅ Call data successfully pushed for user ${user._id}.`);
-  } catch (error) {
-    console.error("❌ Error saving call report:", error);
-    // Depending on the application, you might want to re-throw or handle specific errors
-    // throw error; 
-  }
+    if (!assistantId) {
+        console.warn("⚠️ No assistant ID found in payload message.");
+        return;
+    }
+
+    try {
+        // Connect to DB once, ideally this is handled by a global middleware or service
+        // If connectDB is idempotent, it's fine here, otherwise consider moving it.
+        await connectDB();
+
+        let user = await User.findOne({ CallQueue: { $elemMatch: { assistantId: assistantId } } });
+
+        // If not found, use fallback user
+        if (!user) {
+            console.warn(`⚠ No user found with assistant ID: ${assistantId}, using fallback.`);
+            user = await User.findById("user_2x0DhdwrWfE9PpFSljdOd3aOvYG");
+
+            if (!user) {
+                console.error("❌ Fallback user not found. Cannot save call report.");
+                return;
+            }
+        }
+
+        // Push the message into fullCallData
+        await User.findByIdAndUpdate(
+            user._id,
+            { $push: { fullCallData: message } },
+            { new: true }
+        );
+
+        console.log(`✅ Call data pushed to user ${user._id}`);
+    } catch (error) {
+        console.error("❌ Error saving call report:", error);
+    }
 };
