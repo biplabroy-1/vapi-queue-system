@@ -68,36 +68,46 @@ export enum VapiWebhookEnum {
  * @param payload - Optional payload containing end of call report data
  * @returns A Promise that resolves when the end of call report has been processed
  */
-export const endOfCallReportHandler = async (
-    payload: any
-): Promise<void> => {
-    if (!payload) {
-        console.warn("⚠️ No payload provided to endOfCallReportHandler");
-        return;
+export const endOfCallReportHandler = async (payload: any): Promise<void> => {
+  if (!payload || !payload.message) {
+    console.warn("⚠️ Invalid or missing payload/message in endOfCallReportHandler.");
+    return;
+  }
+
+  const { message } = payload;
+  const assistantId = message?.assistant?.id;
+
+  if (!assistantId) {
+    console.warn("⚠️ No assistant ID found in payload message.");
+    return;
+  }
+
+  try {
+    // Connect to DB once, ideally this is handled by a global middleware or service
+    // If connectDB is idempotent, it's fine here, otherwise consider moving it.
+    await connectDB(); 
+
+    // Find user by assistantId directly using dot notation for embedded documents
+    // and efficient indexing if CallQueue is structured appropriately.
+    // Assuming CallQueue stores assistantId as keys directly or in a nested structure.
+    const user = await User.findOne({ [`CallQueue.${assistantId}`]: { $exists: true } });
+
+    if (!user) {
+      console.warn(`⚠️ No user found with assistant ID: ${assistantId}`);
+      return;
     }
 
-    try {
-        await connectDB();
-        const result = payload.message;
+    // Push call report into fullCallData
+    await User.findByIdAndUpdate(
+      user._id,
+      { $push: { fullCallData: message } },
+      { new: true } // Return the updated document
+    );
 
-        // Extract assistant ID from the payload if available
-        const assistantId = payload.message?.assistant?.id;
-
-        // Find user with matching assistantId
-        const user = await User.findOne({ assistantId: assistantId });
-
-        if (user) {
-            await User.findByIdAndUpdate(
-                user._id,
-                { $push: { fullCallData: result } },
-                { new: true }
-            );
-
-            console.log(`✅ Call data pushed to user ${user._id}`);
-        } else {
-            console.warn(`⚠️ No user found with assistant ID: ${assistantId}`);
-        }
-    } catch (error) {
-        console.error("❌ Error saving call report:", error);
-    }
+    console.log(`✅ Call data successfully pushed for user ${user._id}.`);
+  } catch (error) {
+    console.error("❌ Error saving call report:", error);
+    // Depending on the application, you might want to re-throw or handle specific errors
+    // throw error; 
+  }
 };
