@@ -69,7 +69,7 @@ export enum VapiWebhookEnum {
  * @returns A Promise that resolves when the end of call report has been processed
  */
 export const endOfCallReportHandler = async (payload: any): Promise<void> => {
-  if (!payload || !payload.message) {
+  if (!payload) {
     console.warn("⚠️ Invalid or missing payload/message in endOfCallReportHandler.");
     return;
   }
