@@ -1,6 +1,6 @@
 // filepath: src/controllers/callQueueController.ts
 import type { Request, Response } from "express";
-import { type Contact, User } from "../models/models";
+import User, { type Contact } from "../models/models";
 import { connectDB } from "../connectDB";
 import { processNextCall } from "../services/callQueueService";
 
