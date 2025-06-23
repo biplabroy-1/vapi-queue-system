@@ -11,13 +11,6 @@ import toHumanReadableDate from "./src/utils";
 dotenv.config();
 
 
-declare global {
-  var activeCallCount: number;
-  var MAX_CONCURRENT_CALLS: number;
-}
-global.activeCallCount = 0;
-global.MAX_CONCURRENT_CALLS = 1
-
 // Initialize express
 const app = express();
 app.use(bodyParser.json());

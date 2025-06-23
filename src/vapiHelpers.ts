@@ -13,8 +13,8 @@ export const isVapiBusy = async (): Promise<boolean> => {
             return true;
         }
 
-        activeCallCount = data.filter(call => !["ended", "queued", "scheduled"].includes(call?.status)).length;
-        return activeCallCount >= MAX_CONCURRENT_CALLS;
+        const activeCallCount = data.filter(call => !["ended", "queued", "scheduled"].includes(call?.status)).length;
+        return !!activeCallCount
     } catch (err) {
         console.error("❌ Failed to check VAPI status:", err);
         return true;
@@ -51,5 +51,4 @@ export const makeCall = async (
     await res.json()
 
     console.log(`✅ Call made to ${call.name} (${call.number})`);
-    activeCallCount++;
 };

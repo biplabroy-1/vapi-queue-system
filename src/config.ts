@@ -19,7 +19,6 @@ export const config = {
     // VAPI configuration
     vapi: {
         apiKey: process.env.VAPI_API_KEY || '',
-        maxConcurrentCalls: process.env.MAX_CONCURRENT_CALLS ? Number.parseInt(process.env.MAX_CONCURRENT_CALLS) : 2,
     },
 
     // Default call time settings

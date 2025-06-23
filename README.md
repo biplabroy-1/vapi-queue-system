@@ -50,7 +50,6 @@ The system supports configuring different assistant types and personas for diffe
 
 - `MONGODB_URI` - MongoDB connection string
 - `VAPI_API_KEY` - API key for VAPI
-- `MAX_CONCURRENT_CALLS` - Maximum number of concurrent calls (default: 2)
 - `ASSISTANT_ID_SOLAR` - VAPI assistant ID for Solar persona
 - `ASSISTANT_ID_AI_BUSINESS` - VAPI assistant ID for AI Business persona
 - `ASSISTANT_ID_VEHICLE_MGMT` - VAPI assistant ID for Vehicle Management persona
