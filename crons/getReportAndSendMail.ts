@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs"
-import User from "../src/models/models";
+import User from "../src/models/User";
 import { connectDB } from "../src/connectDB";
 import xlsx from "json-as-xlsx";
 import dayjs from "dayjs";

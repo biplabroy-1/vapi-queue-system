@@ -1,4 +1,4 @@
-import type { IUser } from "./models/models";
+import type { IUser } from "./models/User";
 import { config } from "./config";
 
 export const isVapiBusy = async (): Promise<boolean> => {
@@ -24,10 +24,8 @@ export const isVapiBusy = async (): Promise<boolean> => {
 export const makeCall = async (
     user: IUser,
     call: { name: string; number: string },
-    customAssistantId?: string
+    assistantId?: string
 ) => {
-    const assistantId = customAssistantId || user.assistantId;
-
     const res = await fetch("https://api.vapi.ai/call", {
         method: "POST",
         headers: {

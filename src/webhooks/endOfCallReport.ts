@@ -1,7 +1,7 @@
 // filepath: src/webhooks/endOfCallReport.ts
 import { connectDB } from "../connectDB";
-import User from "../models/models";
-import CallData from "../models/CallData";
+import User, { IUser } from "../models/User";
+import CallData from "../models/callData.model";
 
 export enum VapiWebhookEnum {
     ASSISTANT_REQUEST = "assistant-request",
@@ -39,7 +39,8 @@ export const endOfCallReportHandler = async (payload: any): Promise<void> => {
     try {
         await connectDB();
 
-        let user = await User.findOne({ callQueue: { $exists: true }, assistantId });
+        let user = await findUserByAssistantId(assistantId);
+        
         if (!user) {
             console.warn(`⚠ No user found with assistant ID: ${assistantId}, using fallback.`);
             user = await User.findById("user_2x0DhdwrWfE9PpFSljdOd3aOvYG");
@@ -61,3 +62,36 @@ export const endOfCallReportHandler = async (payload: any): Promise<void> => {
         throw new Error("❌ Error saving call report:", error);
     }
 };
+
+async function findUserByAssistantId(assistantIdToFind: string): Promise<IUser | null> {
+    const queryConditions: any[] = []; // Use 'any' for now due to dynamic key construction
+
+    // A safer way if you have a fixed set of days you want to check:
+    const daysOfWeekToCheck = [
+        'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+    ];
+    const timeSlotsToCheck = ['morning', 'afternoon', 'evening']; // Assuming these are fixed
+
+    for (const day of daysOfWeekToCheck) {
+        for (const slot of timeSlotsToCheck) {
+            // Construct the full dot-notation path to assistantId for each slot
+            const fullPath = `weeklySchedule.${day}.${slot}.assistantId`;
+            queryConditions.push({ [fullPath]: assistantIdToFind });
+        }
+    }
+
+    if (queryConditions.length === 0) {
+        console.warn("No schedule paths generated for query. Check `daysOfWeekToCheck` or `timeSlotsToCheck`.");
+        return null;
+    }
+
+    try {
+        const user = await User.findOne({
+            $or: queryConditions
+        });
+        return user;
+    } catch (error) {
+        console.error("Error finding user by assistant ID:", error);
+        throw error; // Re-throw the error or handle it as appropriate
+    }
+}

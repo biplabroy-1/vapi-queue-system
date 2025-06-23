@@ -45,19 +45,10 @@ export interface IUser extends Document {
   firstName?: string;
   lastName?: string;
   profileImageUrl?: string;
-  phoneNumber: string;
+
   twilioConfig: TwilioConfig;
   assistantId: string;
   content: string;
-
-  // New structure for assistant queues
-  callQueue: Record<string, Contact[]>; // assistantId: Contact[]
-  callQueueDone: Record<string, (Contact & { status?: string })[]>;
-
-  fullCallData?: Record<string, any>[];
-
-  defaultCallTimeStart: string;
-  defaultCallTimeEnd: string;
 
   weeklySchedule?: WeeklySchedule;
 
@@ -118,18 +109,7 @@ const UserSchema = new Schema<IUser>(
     profileImageUrl: String,
 
     twilioConfig: { type: TwilioConfigSchema, required: true },
-    assistantId: { type: String, required: true },
     content: { type: String },
-
-    callQueue: {
-      type: Object,
-      default: () => ({})
-    },
-
-    callQueueDone: {
-      type: Object,
-      default: () => ({})
-    },
 
     weeklySchedule: { type: WeeklyScheduleSchema }
   },
