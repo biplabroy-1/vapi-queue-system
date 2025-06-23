@@ -67,16 +67,6 @@ export interface IUser extends Document {
 
 /** ────── Schema Definitions ────── **/
 
-const ContactSchema = new Schema<Contact>(
-  {
-    name: { type: String, required: true },
-    number: { type: String, required: true },
-    assistantId: { type: String, required: true },
-    status: { type: String }
-  },
-  { _id: false }
-);
-
 const ScheduleSlotSchema = new Schema<ScheduleSlot>(
   {
     assistantName: { type: String, required: true },
@@ -109,8 +99,6 @@ const WeeklyScheduleSchema = new Schema<WeeklySchedule>(
   { _id: false }
 );
 
-const FullCallDataSchema = new Schema({}, { strict: false, _id: false });
-
 const TwilioConfigSchema = new Schema<TwilioConfig>(
   {
     sid: { type: String, required: true },
@@ -142,8 +130,6 @@ const UserSchema = new Schema<IUser>(
       type: Object,
       default: () => ({})
     },
-
-    fullCallData: [FullCallDataSchema],
 
     weeklySchedule: { type: WeeklyScheduleSchema }
   },

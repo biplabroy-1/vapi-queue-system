@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs"
-import nodemailer from "nodemailer";
 import User from "../src/models/models";
 import { connectDB } from "../src/connectDB";
 import xlsx from "json-as-xlsx";
@@ -13,7 +12,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 dotenv.config();
 
-const EMAIL_TO = process.env.EMAIL_TO as string;
+const EMAIL_TO: string[] = process.env.EMAIL_TO?.split(',').map(email => email.trim()) as string[];
 
 function getTodayDateRange() {
     const end = new Date(); // current time
@@ -148,7 +147,7 @@ async function sendEmailWithAttachment(filePaths: string[]) {
     try {
         const { data, error } = await resend.emails.send({
             from: "GlobalTFN Bot <noreply@mail.globaltfn.tech>",
-            to: [EMAIL_TO],
+            to: EMAIL_TO,
             subject: "Last 24 Hour Call Reports",
             html: `<p>📞 Here are the latest call reports.</p>`,
             attachments: attachments.map(file => ({

@@ -1,6 +1,7 @@
 // filepath: src/webhooks/endOfCallReport.ts
 import { connectDB } from "../connectDB";
 import User from "../models/models";
+import CallData from "../models/CallData";
 
 export enum VapiWebhookEnum {
     ASSISTANT_REQUEST = "assistant-request",
@@ -11,53 +12,6 @@ export enum VapiWebhookEnum {
     SPEECH_UPDATE = "speech-update",
     TRANSCRIPT = "transcript",
 }
-
-// export interface ConversationMessage {
-//     role: "user" | "system" | "bot" | "function_call" | "function_result";
-//     message?: string;
-//     name?: string;
-//     args?: string;
-//     result?: string;
-//     time: number;
-//     endTime?: number;
-//     secondsFromStart: number;
-// }
-
-// export interface VapiCall {
-//     id?: string;
-//     // Add other properties as needed
-// }
-
-// interface BaseVapiPayload {
-//     call: VapiCall;
-// }
-
-// export interface EndOfCallReportPayload extends BaseVapiPayload {
-//     type: VapiWebhookEnum.END_OF_CALL_REPORT;
-//     endedReason: string;
-//     transcript: string;
-//     messages: ConversationMessage[];
-//     summary: string;
-//     recordingUrl?: string;
-// }
-
-// // Create a schema for the end of call report
-// const CallReportSchema = new mongoose.Schema(
-//     {
-//         callId: { type: String },
-//         endedReason: { type: String },
-//         transcript: { type: String },
-//         summary: { type: String },
-//         recordingUrl: { type: String },
-//         messages: { type: Array },
-//         userId: { type: String },
-//     },
-//     { timestamps: true }
-// );
-
-// // Create a model if it doesn't exist
-// const CallReport = mongoose.models.CallReport || mongoose.model("CallReport", CallReportSchema);
-
 /**
  * Handles the end of call report processing.
  * 
@@ -83,32 +37,27 @@ export const endOfCallReportHandler = async (payload: any): Promise<void> => {
     }
 
     try {
-        // Connect to DB once, ideally this is handled by a global middleware or service
-        // If connectDB is idempotent, it's fine here, otherwise consider moving it.
         await connectDB();
 
-        let user = await User.findOne({ CallQueue: { $elemMatch: { assistantId: assistantId } } });
-
-        // If not found, use fallback user
+        let user = await User.findOne({ callQueue: { $exists: true }, assistantId });
         if (!user) {
             console.warn(`⚠ No user found with assistant ID: ${assistantId}, using fallback.`);
             user = await User.findById("user_2x0DhdwrWfE9PpFSljdOd3aOvYG");
-
             if (!user) {
                 console.error("❌ Fallback user not found. Cannot save call report.");
                 return;
             }
         }
 
-        // Push the message into fullCallData
-        await User.findByIdAndUpdate(
-            user._id,
-            { $push: { fullCallData: message } },
-            { new: true }
-        );
-
-        console.log(`✅ Call data pushed to user ${user._id}`);
-    } catch (error) {
+        // Save call data to CallData collection
+        await CallData.create({
+            userId: user._id,
+            ...message
+        });
+        
+        console.log(`✅ Call data saved to CallData for user ${user._id}`);
+    } catch (error:any) {
         console.error("❌ Error saving call report:", error);
+        throw new Error("❌ Error saving call report:", error);
     }
 };
