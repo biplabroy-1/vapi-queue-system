@@ -55,7 +55,7 @@ export const endOfCallReportHandler = async (payload: any): Promise<void> => {
     userId: user._id,
     ...message,
 });
-        callData.save()
+        await callData.save();
         
         console.log(`✅ Call data saved to CallData for user ${user._id} using: ${callData._id}`);
     } catch (error:any) {
