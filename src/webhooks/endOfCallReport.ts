@@ -50,13 +50,14 @@ export const endOfCallReportHandler = async (payload: any): Promise<void> => {
             }
         }
 
-        // Save call data to CallData collection
-        await CallData.create({
-            userId: user._id,
-            ...message
-        });
+        // Save call data to CallData
+        const callData = new CallData({
+    userId: user._id,
+    ...message,
+});
+        await callData.save();
         
-        console.log(`✅ Call data saved to CallData for user ${user._id}`);
+        console.log(`✅ Call data saved to CallData for user ${user._id} using: ${callData._id}`);
     } catch (error:any) {
         console.error("❌ Error saving call report:", error);
         throw new Error("❌ Error saving call report:", error);
