@@ -2,15 +2,15 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs"
-import User from "../src/models/User";
 import { connectDB } from "../src/connectDB";
 import xlsx from "json-as-xlsx";
 import dayjs from "dayjs";
 import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import CallData from "../src/models/callData.model";
 
 dotenv.config();
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const EMAIL_TO: string[] = process.env.EMAIL_TO?.split(',').map(email => email.trim()) as string[];
 
@@ -18,7 +18,7 @@ function getTodayDateRange() {
     const end = new Date(); // current time
     const endString = end.toISOString();
 
-    const start = new Date(end.getTime() - 48 * 60 * 60 * 1000); // 24 hours ago
+    const start = new Date(end.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
     const startString = start.toISOString();
 
     return { startString, endString };
@@ -27,43 +27,42 @@ function getTodayDateRange() {
 async function fetchTodayFullCallData() {
     const { startString, endString } = getTodayDateRange();
 
-    const users = await User.aggregate([
-        { $match: { clerkId: "user_2x0DhdwrWfE9PpFSljdOd3aOvYG" } },
-        { $unwind: "$fullCallData" },
-        { $match: { "fullCallData.startedAt": { $gt: startString, $lt: endString } } },
+    const users = await CallData.aggregate([
         {
-            $group: {
-                _id: "$clerkId",
-                matchingCalls: {
-                    $push: {
-                        analysis: "$fullCallData.analysis",
-                        startedAt: "$fullCallData.startedAt",
-                        cost: "$fullCallData.cost",
-                        endedReason: "$fullCallData.endedReason",
-                        durationSeconds: "$fullCallData.durationSeconds",
-                        summary: "$fullCallData.summary",
-                        transcript: "$fullCallData.transcript",
-                        recordingUrl: "$fullCallData.recordingUrl",
-                        call: {
-                            id: "$fullCallData.call.id",
-                            type: "$fullCallData.call.type",
-                            phoneNumber: "$fullCallData.call.phoneNumber.twilioPhoneNumber"
-                        },
-                        customer: {
-                            name: "$fullCallData.customer.name",
-                            number: "$fullCallData.customer.number"
-                        },
-                        assistant: {
-                            id: "$fullCallData.assistant.id",
-                            name: "$fullCallData.assistant.name"
-                        }
-                    }
+            $match: {
+                userId: "user_2x0DhdwrWfE9PpFSljdOd3aOvYG",
+                startedAt: { $gt: startString, $lt: endString }
+            }
+        },
+        {
+            $project: {
+                _id: 0,
+                analysis: 1,
+                startedAt: 1,
+                cost: 1,
+                endedReason: 1,
+                durationSeconds: 1,
+                summary: 1,
+                transcript: 1,
+                recordingUrl: 1,
+                call: {
+                    id: 1,
+                    type: 1,
+                    phoneNumber: 1
+                },
+                customer: {
+                    name: 1,
+                    number: 1
+                },
+                assistant: {
+                    id: 1,
+                    name: 1
                 }
             }
         }
     ]);
 
-    return users[0] || {};
+    return users || [];
 }
 
 function saveToXLSX(calls: any[], label: string = "AllCalls"): string {
@@ -77,6 +76,8 @@ function saveToXLSX(calls: any[], label: string = "AllCalls"): string {
                 { label: "Customer Name", value: "customerName" },
                 { label: "Customer Number", value: "customerNumber" },
                 { label: "Duration", value: "duration" },
+                { label: "Call Type", value: "callType" },
+                { label: "Cost", value: "cost" },
                 { label: "Assistant", value: "assistant" },
                 { label: "Started At", value: "startedAt" },
                 { label: "Ended Reason", value: "endedReason" },
@@ -88,7 +89,7 @@ function saveToXLSX(calls: any[], label: string = "AllCalls"): string {
             content: calls.map((call: any) => ({
                 customerNumber: call.customer?.number || "Unknown",
                 customerName: call.customer?.name || "Unknown",
-                phoneNumber: call.call?.phoneNumber || "N/A",
+                phoneNumber: call.call?.phoneNumber.twilioPhoneNumber || "N/A",
                 callType: call.call?.type || "N/A",
                 successEvaluation: call.analysis?.successEvaluation ?? "N/A",
                 cost: call.cost,
@@ -101,7 +102,7 @@ function saveToXLSX(calls: any[], label: string = "AllCalls"): string {
                     : "N/A",
                 endedReason: call.endedReason || "N/A",
                 recordingUrl: call.recordingUrl || "N/A",
-                analysisSummary: call.analysis?.summary || "N/A",
+                analysisSummary: call.summary || "N/A",
                 transcript: call.transcript || "N/A",
             })),
         },
@@ -173,18 +174,18 @@ async function main() {
 
         const data = await fetchTodayFullCallData();
 
-        if (!data.matchingCalls?.length) {
+        if (!data?.length) {
             console.log("No calls found for the date range.");
             return;
         }
 
         // Save all calls
-        const allCallsPath = saveToXLSX(data.matchingCalls, "AllCalls");
+        const allCallsPath = saveToXLSX(data, "AllCalls");
 
         // Filter successful calls
-        const successfulCalls = data.matchingCalls.filter((call: any) =>
+        const successfulCalls = data.filter((call: any) =>
             call.analysis?.successEvaluation === true &&
-            call.durationSeconds > 20 &&
+            call.durationSeconds > 10 &&
             call.endedReason?.toLowerCase() !== "voicemail"
         );
 
