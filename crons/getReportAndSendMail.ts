@@ -89,8 +89,8 @@ function saveToXLSX(calls: any[], label: string = "AllCalls"): string {
             content: calls.map((call: any) => ({
                 customerNumber: call.customer?.number || "Unknown",
                 customerName: call.customer?.name || "Unknown",
-                phoneNumber: call.call?.phoneNumber.twilioPhoneNumber || "N/A",
-                callType: call.call?.type || "N/A",
+                phoneNumber: call.call?.phoneNumber?.twilioPhoneNumber ?? "N/A",
+                callType: call.call?.type ?? "N/A",
                 successEvaluation: call.analysis?.successEvaluation ?? "N/A",
                 cost: call.cost,
                 duration: call.durationSeconds
