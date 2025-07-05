@@ -1,9 +1,8 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import User from "./models/User";
 import { connectDB } from "./connectDB";
 import { processNextCall } from "./services/callQueueService";
 import { CallQueue } from "./models/callQueue";
-import mongoose, { ObjectIdToString } from 'mongoose'
 
 const router = express.Router();
 
@@ -81,5 +80,12 @@ router.post("/start-queue", async (req, res) => {
     return res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+router.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: "ok",
+  });
+});
+
 
 export default router;
