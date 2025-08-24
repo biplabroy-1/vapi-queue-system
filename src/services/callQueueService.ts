@@ -25,7 +25,6 @@ export const processNextCall = async (): Promise<void> => {
       user.weeklySchedule,
       getCurrentDayOfWeek() as keyof WeeklySchedule
     );
-    console.log("Slot data",slotData,slotName);
     
 
     if (!slotName || !slotData?.assistantId)
@@ -52,6 +51,7 @@ export const processNextCall = async (): Promise<void> => {
     const callDoneDoc = await CallQueueDone.create({
       userId,
       agentId: assistantId,
+      agentName: nextCall.agentName,
       name: nextCall.name,
       number: nextCall.number,
       status: "pending_initiation",

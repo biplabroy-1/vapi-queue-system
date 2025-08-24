@@ -9,7 +9,7 @@ const router = express.Router();
 // POST /queue-calls - Queue bulk contacts
 // @ts-ignore
 router.post("/queue-calls", async (req, res) => {
-  const { clerkId, contacts, assistantId } = req.body;
+  const { clerkId, contacts, assistantId, assistantName } = req.body;
 
   if (!clerkId || !Array.isArray(contacts) || !assistantId) {
     return res.status(400).json({ error: "clerkId, assistantId, and contacts[] are required" });
@@ -32,6 +32,7 @@ router.post("/queue-calls", async (req, res) => {
     const queueDocs = validContacts.map((contact) => ({
       userId: user._id,
       agentId: assistantId,
+      agentName: assistantName,
       name: contact.name,
       number: contact.number,
       status: "pending",
