@@ -51,7 +51,7 @@ export const processNextCall = async (): Promise<void> => {
     const callDoneDoc = await CallQueueDone.create({
       userId,
       agentId: assistantId,
-      agentName: nextCall.agentName,
+      agentName: nextCall.agentName || "",
       name: nextCall.name,
       number: nextCall.number,
       status: "pending_initiation",
