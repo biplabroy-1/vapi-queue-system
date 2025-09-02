@@ -16,6 +16,8 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
+		"@ai-sdk/groq": "^2.0.16",
+		"ai": "^5.0.29",
 		"axios": "^1.9.0",
 		"body-parser": "^2.2.0",
 		"cors": "^2.8.5",

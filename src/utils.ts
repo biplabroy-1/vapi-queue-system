@@ -1,13 +1,29 @@
 import dayjs from "dayjs";
+import { groq } from '@ai-sdk/groq';
+import { generateObject } from 'ai';
+import { z } from 'zod';
 
 export const isWithinCallHours = (startTime: string, endTime: string): boolean => {
-    const now = new Date();
-    const currentTime =
-        `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    const currentTime = dayjs().format("HH:mm");
+
+    const toMinutes = (time: string) => {
+        const [h, m] = time.split(":").map(Number);
+        return h * 60 + m;
+    };
+
     console.log("Current time:", currentTime);
     console.log("Start time:", startTime);
     console.log("End time:", endTime);
-    return currentTime >= startTime && currentTime <= endTime;
+
+    const start = toMinutes(startTime);
+    const end = toMinutes(endTime);
+    const current = toMinutes(currentTime);
+
+    if (start <= end) {
+        return current >= start && current <= end;
+    } else {
+        return current >= start || current <= end;
+    }
 };
 
 export const delay = (seconds: number) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
@@ -64,8 +80,6 @@ export const getCurrentTimeSlot = (
     return { slotName: null, slotData: null };
 };
 
-
-
 export const getCurrentDayOfWeek = (): DayOfWeek => {
     const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayIndex = new Date().getDay();
@@ -74,6 +88,50 @@ export const getCurrentDayOfWeek = (): DayOfWeek => {
 
 // Example usage:
 const iso = new Date().toISOString();
-console.log("Local Time", toHumanReadableDate(iso));                  // Local time
-console.log("UTC Time", toHumanReadableDate(iso, "en-US", "UTC")); // UTC
+console.log("Local Time", toHumanReadableDate(iso));                        // Local time
+console.log("UTC Time", toHumanReadableDate(iso, "en-US", "UTC"));          // UTC
 console.log("IST Time", toHumanReadableDate(iso, "en-IN", "Asia/Kolkata")); // IST
+
+export const CallInsightSchema = z.object({
+    intent: z.enum(["buy", "not_buy", "undecided"])
+        .describe("Did the customer show intent to buy?"),
+
+    main_reason: z.string().max(200)
+        .describe("The main reason for buying, or the main objection if not buying."),
+
+    positive_triggers: z.array(z.string())
+        .describe("Key things they liked or responded positively to."),
+
+    negative_triggers: z.array(z.string())
+        .describe("Key problems or objections they raised."),
+
+    // non-sensitive background info (not PII)
+    customer_context: z.object({
+        profession: z.string().optional()
+            .describe("Job/profession if clearly mentioned."),
+        industry: z.string().optional()
+            .describe("Industry or business domain if mentioned."),
+        role: z.string().optional()
+            .describe("Role in company if mentioned (e.g., owner, manager)."),
+        personal_notes: z.array(z.string()).optional()
+            .describe("Random personal context explicitly mentioned, e.g., hobbies, likes, casual interests or any other things.")
+    }).optional()
+});
+
+type CallInsight = z.infer<typeof CallInsightSchema>;
+
+export async function analyzeCallInsight(transcript: string): Promise<CallInsight> {
+    const { object } = await generateObject({
+        model: groq('moonshotai/kimi-k2-instruct'),
+        schema: CallInsightSchema,
+        prompt: `Analyze the customer's emotional tone in the transcript below.
+                Return only structured JSON.
+
+                Transcript: 
+                ${transcript}`
+    });
+
+    return object;
+}
+
+
