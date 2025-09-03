@@ -66,8 +66,8 @@ export const endOfCallReportHandler = async (payload: EndOfCallPayload): Promise
         else if (message.durationSeconds <= 10) {
             console.info("📞 Call ended quickly. No further analysis needed.");
         } else {
-            callData.insight = await analyzeCallInsight(message.transcript);
-            callData.markModified('insight');
+            callData.insights = await analyzeCallInsight(message.transcript);
+            callData.markModified('insights');
         }
         await callData.save();
         console.info(`✅ Call data saved to CallData for user ${user._id} using: ${callData._id}`);
